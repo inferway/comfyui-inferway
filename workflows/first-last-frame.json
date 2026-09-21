@@ -1,0 +1,45 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example_first_frame.png"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example_last_frame.png"
+    }
+  },
+  "3": {
+    "class_type": "InferwayH3Generate",
+    "inputs": {
+      "model": "inferway/minimax-h3-768p",
+      "prompt": "Smooth cinematic transition from sunrise over calm ocean waves to vibrant starry night sky, 4k",
+      "duration_seconds": 5,
+      "resolution": "default",
+      "seed": "100",
+      "first_frame": [
+        "1",
+        0
+      ],
+      "last_frame": [
+        "2",
+        0
+      ],
+      "profile": "default",
+      "wait_timeout_seconds": 600
+    }
+  },
+  "4": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "3",
+        0
+      ],
+      "filename_prefix": "video/first_last_frame",
+      "format": "mp4"
+    }
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "InferwayH3Generate",
+      "pos": [
+        100,
+        100
+      ],
+      "size": [
+        380,
+        420
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "ref_image_1",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "ref_image_2",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "ref_image_3",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "interaction_id",
+          "type": "STRING",
+          "links": [
+            2
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "InferwayH3Generate",
+        "cnr_id": "inferway-comfy",
+        "ver": "0.1.0"
+      },
+      "widgets_values": [
+        "inferway/minimax-h3-768p",
+        false,
+        "refresh",
+        "A cinematic shot of a majestic waterfall cascading down a lush green mountain cliff at sunrise, photorealistic, 4k",
+        5,
+        "default",
+        "default",
+        600,
+        "42"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "SaveVideo",
+      "pos": [
+        540,
+        100
+      ],
+      "size": [
+        300,
+        200
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": [
+        "video/t2v",
+        "mp4",
+        "auto"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "PreviewAny",
+      "pos": [
+        540,
+        360
+      ],
+      "size": [
+        300,
+        160
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 0
+        }
+      ],
+      "title": "Interaction ID (Copy to Resume/Cancel)",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "VIDEO"
+    ],
+    [
+      2,
+      1,
+      1,
+      3,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.0,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

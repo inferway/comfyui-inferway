@@ -1,0 +1,25 @@
+{
+  "1": {
+    "class_type": "InferwayH3Generate",
+    "inputs": {
+      "model": "inferway/minimax-h3-768p",
+      "prompt": "A cinematic shot of a majestic waterfall cascading down a lush green mountain cliff at sunrise, photorealistic, 4k",
+      "duration_seconds": 5,
+      "resolution": "default",
+      "seed": "42",
+      "profile": "default",
+      "wait_timeout_seconds": 600
+    }
+  },
+  "2": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "1",
+        0
+      ],
+      "filename_prefix": "video/t2v",
+      "format": "mp4"
+    }
+  }
+}

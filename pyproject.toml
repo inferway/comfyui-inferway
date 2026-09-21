@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inferway-comfy"
+version = "0.1.0"
+description = "Inferway ComfyUI client contracts and integration"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.24.0",
+]
+
+[project.urls]
+Repository = "https://github.com/inferway/comfyui-inferway"
+
+[tool.comfy]
+PublisherId = "inferway"
+DisplayName = "Inferway H3"
+requires-comfyui = ">=0.35.0"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.5.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["inferway_comfy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["check_*.py"]

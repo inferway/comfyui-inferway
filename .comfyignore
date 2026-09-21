@@ -1,0 +1,15 @@
+# Files and directories excluded from Comfy Registry publication candidate
+tests/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+.venv/
+uv.lock
+compatibility.json
+.git/
+.github/
+.DS_Store
+tmp/

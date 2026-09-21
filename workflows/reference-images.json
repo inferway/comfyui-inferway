@@ -1,0 +1,55 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example_reference_1.png"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example_reference_2.png"
+    }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example_reference_3.png"
+    }
+  },
+  "4": {
+    "class_type": "InferwayH3Generate",
+    "inputs": {
+      "model": "inferway/minimax-h3-768p",
+      "prompt": "Cinematic character sequence maintaining visual consistency with reference images, high fidelity, 4k",
+      "duration_seconds": 5,
+      "resolution": "default",
+      "seed": "200",
+      "ref_image_1": [
+        "1",
+        0
+      ],
+      "ref_image_2": [
+        "2",
+        0
+      ],
+      "ref_image_3": [
+        "3",
+        0
+      ],
+      "profile": "default",
+      "wait_timeout_seconds": 600
+    }
+  },
+  "5": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "4",
+        0
+      ],
+      "filename_prefix": "video/reference_images",
+      "format": "mp4"
+    }
+  }
+}

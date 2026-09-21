@@ -1,0 +1,9 @@
+{
+  "1": {
+    "class_type": "InferwayH3Cancel",
+    "inputs": {
+      "interaction_id": "YOUR_INTERACTION_ID",
+      "profile": "default"
+    }
+  }
+}
