@@ -105,5 +105,5 @@
   - 当前生产环境观察为纯文生视频（`t2v-only`）；画布节点包含图片插槽，但仅在远端模型目录明确声明支持时才允许开启对应图片模式。
   - 测试中观察到的 AAC 音频结果证明了当前客户端与 `SaveVideo` 管线能够无损保留音频流，不代表远端服务的所有未来响应均保证包含 AAC 音频。
   - Windows 与 macOS 环境尚未经过独立核验。
-  - 本工作流及扩展包发布状态为候选版本（Candidate），**尚未发布**至官方 ComfyUI Registry 索引或第三方公开仓库，用户暂无法通过 Registry 检索安装。
+  - 本工作流所属扩展包已发布至官方 ComfyUI Registry（包 ID `inferway-comfy`，发布者 `inferway`）及公开仓库 https://github.com/inferway/comfyui-inferway ，用户可通过 ComfyUI-Manager 检索并安装。
   - 文档严格遵守保密边界，绝不包含任何 API 密钥、私有路径、完整交互 ID、提示词原文或签名下载链接。

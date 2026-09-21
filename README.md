@@ -3,7 +3,7 @@
 Native ComfyUI custom node extension for [Inferway](https://inferway.ai) H3 video generation (`inferway/minimax-h3-768p`), featuring text-to-video, first/last frame video generation, reference image video generation, task resumption, and remote task cancellation.
 
 > [!NOTE]
-> **Candidate Notice**: This distribution package is a publication candidate (version 0.1.0) pending final authorization. Proposed Registry package ID `inferway-comfy`, PublisherId `inferway`, DisplayName `Inferway H3`, and proposed repository `https://github.com/inferway/comfyui-inferway`. Registry and public repository publication remain pending; the node cannot yet be searched or installed from the Registry.
+> **Package**: Published to the ComfyUI Registry as package ID `inferway-comfy` (PublisherId `inferway`, DisplayName `Inferway H3`). Source repository: https://github.com/inferway/comfyui-inferway
 >
 > **Production Acceptance & Verification Boundaries**: Authorized real production acceptance was completed on 2026-09-21 for `inferway/minimax-h3-768p` on Linux (Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6). Windows and macOS environments have not yet been independently verified. Real production validation demonstrated exactly one paid create across Generate, Resume, and Cancel workflows. See [Section 7](#7-production-acceptance-evidence--verification-boundaries) for complete verified evidence and boundaries.
 
@@ -11,16 +11,15 @@ Native ComfyUI custom node extension for [Inferway](https://inferway.ai) H3 vide
 
 ## 1. Installation
 
-### 1.1 ComfyUI-Manager (Pending Publication)
+### 1.1 ComfyUI-Manager (Recommended)
 
-Publication to ComfyUI-Manager / ComfyUI Registry is pending final authorization. Once published, installation will be:
+Install directly from the ComfyUI Registry:
 
 1. Open **ComfyUI-Manager** in your ComfyUI interface.
 2. Search for **Inferway H3** (or package ID `inferway-comfy`).
 3. Click **Install**.
 4. Restart your ComfyUI server.
 
-Currently, install manually from archive or source directory as described below.
 
 ### 1.2 Manual Installation (Same-Python pip fallback)
 
@@ -207,11 +206,11 @@ Authorized real production acceptance was completed on **2026-09-21** for the H3
 - **Capability Boundary**: Production capability was observed as text-to-video only (`t2v-only`). Image sockets exist on the node, but image modes are allowed only when the live model catalog advertises them.
 - **Audio Scope**: The observed AAC result proves the tested path and media pipeline preservation, not that every future response from the service is guaranteed to contain AAC audio.
 - **Platform Scope**: Linux is verified; Windows and macOS environments have not been independently verified.
-- **Publication Status**: Registry and public repository publication remain pending; users cannot yet search or install the node from the ComfyUI Registry.
+- **Publication Status**: Published to the ComfyUI Registry as `inferway-comfy` and to the public repository https://github.com/inferway/comfyui-inferway; the node is searchable and installable from ComfyUI-Manager.
 - **Confidentiality**: In accordance with security policy, no API keys, secret paths, full interaction IDs, prompt text, internal host paths, prompt IDs, or signed download URLs are published.
 
 ---
 
 ## 8. License
 
-This client-only extension package is proposed under the [MIT License](LICENSE) for publication candidate review.
+This client-only extension package is released under the [MIT License](LICENSE).
