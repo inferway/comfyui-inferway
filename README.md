@@ -11,6 +11,8 @@ Native ComfyUI custom node extension for [Inferway](https://inferway.ai) H3 vide
 
 ## 1. Installation
 
+Requirements: ComfyUI 0.35.0 or later, running on Python 3.10 or later.
+
 ### 1.1 ComfyUI-Manager (Recommended)
 
 Install directly from the ComfyUI Registry:
@@ -46,6 +48,8 @@ Alternatively, install the package in editable mode:
 ---
 
 ## 2. Server-Side Key Configuration & Security
+
+**Get an API key first**: sign in at [inferway.ai/console/keys](https://inferway.ai/console/keys) and create one. The [API documentation](https://inferway.ai/docs) describes the video generation API these nodes call.
 
 Inferway nodes use a strict server-side credentials boundary to protect API keys:
 
@@ -156,6 +160,8 @@ The CLI lists IDs, model, status, creation time and source key name. It does not
 Use **Ctrl+O** in ComfyUI to import one of the [canvas workflows](workflows/ui/README.md):
 
 - [Text to video](workflows/ui/t2v.json): Generate, save an MP4, and display the interaction ID.
+- [First and last frame](workflows/ui/first-last-frame.json): Load an opening and a closing image, generate the shot between them, and save an MP4. Available only while the live model catalog advertises the mode.
+- [Reference images](workflows/ui/reference-images.json): Load up to three reference images to keep the generated shot visually consistent with them. Available only while the live model catalog advertises the mode.
 - [Resume](workflows/ui/resume.json): Enter an existing interaction ID to retrieve its video without creating another task.
 - [Cancel](workflows/ui/cancel.json): Enter the target interaction ID and inspect the visible outcome and `charged` value.
 

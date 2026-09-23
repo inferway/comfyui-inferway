@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "inferway-comfy"
-version = "0.1.1"
+version = "0.1.2"
 description = "Inferway H3 video generation nodes for ComfyUI (inferway-comfy): text-to-video, first/last-frame video, reference-image video, task resume and remote cancel. Runs inferway/minimax-h3-768p through the Inferway API."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.24.0",
 ]

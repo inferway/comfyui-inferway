@@ -235,7 +235,9 @@ async def wait_for_result(
             else:
                 raise ClientError("unknown_state")
 
-        except TimeoutError:
+        # Python 3.10: asyncio.wait_for raises asyncio.TimeoutError, which only
+        # became an alias of the builtin in 3.11.
+        except (TimeoutError, asyncio.TimeoutError):
             raise WaitTimeoutError(interaction_id) from None
         except ClientError as e:
             if e.code in (

@@ -1,6 +1,6 @@
 {
-  "last_node_id": 3,
-  "last_link_id": 2,
+  "last_node_id": 6,
+  "last_link_id": 5,
   "nodes": [
     {
       "id": 1,
@@ -14,7 +14,7 @@
         420
       ],
       "flags": {},
-      "order": 0,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
@@ -30,17 +30,17 @@
         {
           "name": "ref_image_1",
           "type": "IMAGE",
-          "link": null
+          "link": 3
         },
         {
           "name": "ref_image_2",
           "type": "IMAGE",
-          "link": null
+          "link": 4
         },
         {
           "name": "ref_image_3",
           "type": "IMAGE",
-          "link": null
+          "link": 5
         }
       ],
       "outputs": [
@@ -76,12 +76,12 @@
         "inferway/minimax-h3-768p",
         false,
         "refresh",
-        "A cinematic shot of a majestic waterfall cascading down a lush green mountain cliff at sunrise, photorealistic, 4k",
+        "Cinematic character sequence maintaining visual consistency with reference images, high fidelity, 4k",
         5,
         "default",
         "default",
         600,
-        "42"
+        "200"
       ]
     },
     {
@@ -96,7 +96,7 @@
         200
       ],
       "flags": {},
-      "order": 1,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
@@ -119,7 +119,7 @@
         "ver": "0.35.0"
       },
       "widgets_values": [
-        "video/t2v",
+        "video/reference-images",
         "mp4",
         "auto"
       ]
@@ -136,7 +136,7 @@
         160
       ],
       "flags": {},
-      "order": 2,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -160,6 +160,132 @@
         "ver": "0.35.0"
       },
       "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "LoadImage",
+      "pos": [
+        -320,
+        100
+      ],
+      "size": [
+        320,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "title": "Reference Image 1",
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": [
+        "example_reference_1.png",
+        "image"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "LoadImage",
+      "pos": [
+        -320,
+        460
+      ],
+      "size": [
+        320,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "title": "Reference Image 2",
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": [
+        "example_reference_2.png",
+        "image"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "LoadImage",
+      "pos": [
+        -320,
+        820
+      ],
+      "size": [
+        320,
+        314
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            5
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "title": "Reference Image 3",
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": [
+        "example_reference_3.png",
+        "image"
+      ]
     }
   ],
   "links": [
@@ -178,6 +304,30 @@
       3,
       0,
       "STRING"
+    ],
+    [
+      3,
+      4,
+      0,
+      1,
+      2,
+      "IMAGE"
+    ],
+    [
+      4,
+      5,
+      0,
+      1,
+      3,
+      "IMAGE"
+    ],
+    [
+      5,
+      6,
+      0,
+      1,
+      4,
+      "IMAGE"
     ]
   ],
   "groups": [],

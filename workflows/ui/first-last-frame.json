@@ -1,6 +1,6 @@
 {
-  "last_node_id": 3,
-  "last_link_id": 2,
+  "last_node_id": 5,
+  "last_link_id": 4,
   "nodes": [
     {
       "id": 1,
@@ -14,18 +14,18 @@
         420
       ],
       "flags": {},
-      "order": 0,
+      "order": 2,
       "mode": 0,
       "inputs": [
         {
           "name": "first_frame",
           "type": "IMAGE",
-          "link": null
+          "link": 3
         },
         {
           "name": "last_frame",
           "type": "IMAGE",
-          "link": null
+          "link": 4
         },
         {
           "name": "ref_image_1",
@@ -76,7 +76,7 @@
         "inferway/minimax-h3-768p",
         false,
         "refresh",
-        "A cinematic shot of a majestic waterfall cascading down a lush green mountain cliff at sunrise, photorealistic, 4k",
+        "Use the first image as the opening frame and the second as the closing frame. One continuous cinematic shot, smooth natural motion between them, photorealistic, 4k",
         5,
         "default",
         "default",
@@ -96,7 +96,7 @@
         200
       ],
       "flags": {},
-      "order": 1,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
@@ -119,7 +119,7 @@
         "ver": "0.35.0"
       },
       "widgets_values": [
-        "video/t2v",
+        "video/first-last-frame",
         "mp4",
         "auto"
       ]
@@ -136,7 +136,7 @@
         160
       ],
       "flags": {},
-      "order": 2,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -160,6 +160,90 @@
         "ver": "0.35.0"
       },
       "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "LoadImage",
+      "pos": [
+        -320,
+        100
+      ],
+      "size": [
+        320,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "title": "First Frame",
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": [
+        "example_first_frame.png",
+        "image"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "LoadImage",
+      "pos": [
+        -320,
+        460
+      ],
+      "size": [
+        320,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "title": "Last Frame",
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.35.0"
+      },
+      "widgets_values": [
+        "example_last_frame.png",
+        "image"
+      ]
     }
   ],
   "links": [
@@ -178,6 +262,22 @@
       3,
       0,
       "STRING"
+    ],
+    [
+      3,
+      4,
+      0,
+      1,
+      0,
+      "IMAGE"
+    ],
+    [
+      4,
+      5,
+      0,
+      1,
+      1,
+      "IMAGE"
     ]
   ],
   "groups": [],

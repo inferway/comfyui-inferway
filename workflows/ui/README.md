@@ -9,6 +9,8 @@
 | 文件名 | 核心节点链路 | 功能说明 |
 | --- | --- | --- |
 | `t2v.json` | `InferwayH3Generate` &rarr; `SaveVideo`<br>`InferwayH3Generate` &rarr; `PreviewAny` | 文生视频画布工作流。包含提示词、时长、分辨率及十进制 Seed 参数控件，直连原生 `SaveVideo` 保存视频，并通过原生 `PreviewAny` 节点在画布上直接展示并方便复制任务 `interaction_id`。 |
+| `first-last-frame.json` | `LoadImage` &times;2 &rarr; `InferwayH3Generate` &rarr; `SaveVideo`<br>`InferwayH3Generate` &rarr; `PreviewAny` | 首尾帧生视频画布工作流。两个原生 `LoadImage` 节点分别接入 `first_frame` 与 `last_frame` 插槽,由服务端在两帧之间生成连续镜头。该模式仅在实时模型目录 advertise 时可用,否则服务端以 `mode_unavailable` 拒绝;首尾帧与参考图属于互斥模式,不可在同一张图里混用。 |
+| `reference-images.json` | `LoadImage` &times;3 &rarr; `InferwayH3Generate` &rarr; `SaveVideo`<br>`InferwayH3Generate` &rarr; `PreviewAny` | 参考图生视频画布工作流。三个原生 `LoadImage` 节点分别接入 `ref_image_1` / `ref_image_2` / `ref_image_3` 插槽,由服务端在生成时保持与参考图的视觉一致性。该模式同样仅在实时模型目录 advertise 时可用,否则服务端以 `mode_unavailable` 拒绝;参考图与首尾帧互斥,不可在同一张图里混用。 |
 | `resume.json` | `InferwayH3Resume` &rarr; `SaveVideo` | 任务恢复与下载画布工作流。用于通过任务 ID 恢复等待或重新拉取已完成视频，直连 `SaveVideo`，不发起新任务。 |
 | `cancel.json` | `InferwayH3Cancel` &rarr; `PreviewAny` | 远程任务取消工作流。向服务端发起明确取消请求，并通过原生 `PreviewAny` 节点在画布上实时呈现权威取消处置结果与计费结算状态（`status` / charged）。 |
 

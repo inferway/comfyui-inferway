@@ -11,6 +11,7 @@ import stat
 import urllib.parse
 import uuid
 from pathlib import Path
+from typing import BinaryIO
 
 import httpx
 
@@ -260,47 +261,55 @@ async def download_result(
         raise ContractError("io_error") from None
 
     hasher = hashlib.sha256()
-    total_bytes = 0
+
+    async def _stream_into(f: BinaryIO) -> int:
+        received = 0
+        timeout = httpx.Timeout(total_timeout_seconds)
+        async with download_http.stream(
+            "GET", spec.url, follow_redirects=False, timeout=timeout
+        ) as response:
+            if response.status_code in (301, 302, 303, 307, 308):
+                raise ContractError("download_failed")
+            if response.status_code != 200:
+                raise ContractError("download_failed")
+
+            if response.headers.get("Content-Encoding") not in (
+                None,
+                "identity",
+            ):
+                raise ContractError("invalid_encoding")
+
+            if response.headers.get("Content-Type") != "video/mp4":
+                raise ContractError("invalid_mime_type")
+
+            cl = response.headers.get("Content-Length")
+            if cl is not None:
+                try:
+                    if int(cl) != spec.byte_count:
+                        raise ContractError("mismatched_length")
+                except ValueError:
+                    raise ContractError("mismatched_length") from None
+
+            async for chunk in response.aiter_bytes(chunk_size=65536):
+                received += len(chunk)
+                if received > spec.byte_count:
+                    raise ContractError("oversized_result")
+                hasher.update(chunk)
+                f.write(chunk)
+        return received
 
     try:
         with open(fd, "wb") as f:  # noqa: ASYNC230
             try:
-                timeout = httpx.Timeout(total_timeout_seconds)
-                async with asyncio.timeout(total_timeout_seconds):
-                    async with download_http.stream(
-                        "GET", spec.url, follow_redirects=False, timeout=timeout
-                    ) as response:
-                        if response.status_code in (301, 302, 303, 307, 308):
-                            raise ContractError("download_failed")
-                        if response.status_code != 200:
-                            raise ContractError("download_failed")
-
-                        if response.headers.get("Content-Encoding") not in (
-                            None,
-                            "identity",
-                        ):
-                            raise ContractError("invalid_encoding")
-
-                        if response.headers.get("Content-Type") != "video/mp4":
-                            raise ContractError("invalid_mime_type")
-
-                        cl = response.headers.get("Content-Length")
-                        if cl is not None:
-                            try:
-                                if int(cl) != spec.byte_count:
-                                    raise ContractError("mismatched_length")
-                            except ValueError:
-                                raise ContractError("mismatched_length") from None
-
-                        async for chunk in response.aiter_bytes(chunk_size=65536):
-                            total_bytes += len(chunk)
-                            if total_bytes > spec.byte_count:
-                                raise ContractError("oversized_result")
-                            hasher.update(chunk)
-                            f.write(chunk)
+                # asyncio.wait_for rather than asyncio.timeout, which needs
+                # Python 3.11; ComfyUI itself supports 3.10.
+                total_bytes = await asyncio.wait_for(
+                    _stream_into(f), total_timeout_seconds
+                )
             except httpx.RequestError:
                 raise ContractError("download_network_error") from None
-            except TimeoutError:
+            # Python 3.10: asyncio.TimeoutError is not yet the builtin.
+            except (TimeoutError, asyncio.TimeoutError):
                 raise ContractError("download_timeout") from None
 
         if total_bytes != spec.byte_count:

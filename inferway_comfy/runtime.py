@@ -18,7 +18,7 @@ import urllib.parse
 import weakref
 from collections.abc import Awaitable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import av
 import httpx
@@ -218,7 +218,10 @@ async def interruptible_sleep(seconds: float) -> None:
         check_processing_interrupted()
 
 
-async def run_interruptible[T](coro: Awaitable[T]) -> T:
+_T = TypeVar("_T")
+
+
+async def run_interruptible(coro: Awaitable[_T]) -> _T:
     task = asyncio.create_task(coro)
     try:
         while not task.done():
