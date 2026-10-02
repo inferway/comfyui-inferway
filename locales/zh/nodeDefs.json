@@ -1,0 +1,249 @@
+{
+  "InferwayH3GenerateV2": {
+    "display_name": "Inferway H3 生成视频",
+    "description": "用 Inferway 的 H3 模型生成视频",
+    "inputs": {
+      "model": {
+        "name": "模型",
+        "tooltip": "要用的视频模型"
+      },
+      "prompt": {
+        "name": "提示词",
+        "tooltip": "描述你想要的画面"
+      },
+      "duration_seconds": {
+        "name": "时长（秒）",
+        "tooltip": "视频长度，5–10 秒。按秒计费，价格见 https://inferway.ai/zh/pricing"
+      },
+      "resolution": {
+        "name": "分辨率",
+        "tooltip": "default 是横屏 1344×768；也可以选 1344x768（横屏）或 768x1344（竖屏）"
+      },
+      "seed": {
+        "name": "随机种",
+        "tooltip": "随这一单发出的种子（0 到 18446744073709551615）。每次运行都会新下一单并扣费，跟 seed 固不固定无关；选 randomize，每次出的视频都不一样。"
+      },
+      "control_after_generate": {
+        "name": "生成后的控制"
+      },
+      "first_frame": {
+        "name": "首帧",
+        "tooltip": "成片从这张图开始。不能和参考图同时用"
+      },
+      "last_frame": {
+        "name": "尾帧",
+        "tooltip": "成片停在这张图上，要和首帧一起用"
+      },
+      "ref_image_1": {
+        "name": "参考图 1",
+        "tooltip": "成片会参考图里的人物或场景，最多 3 张。不能和首尾帧同时用"
+      },
+      "ref_image_2": {
+        "name": "参考图 2",
+        "tooltip": "成片会参考图里的人物或场景，最多 3 张。不能和首尾帧同时用"
+      },
+      "ref_image_3": {
+        "name": "参考图 3",
+        "tooltip": "成片会参考图里的人物或场景，最多 3 张。不能和首尾帧同时用"
+      },
+      "profile": {
+        "name": "profile",
+        "tooltip": "用哪个 API key。在“设置 → Inferway”或 Inferway 菜单里添加、切换。"
+      },
+      "wait_timeout_seconds": {
+        "name": "最长等待（秒）",
+        "tooltip": "本地最多等多久。填 0 自动等（最长 7200 秒），也可以填 60–7200。等到上限只是不再等，任务不会取消，完成后照常扣费。"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "视频",
+        "tooltip": "生成的视频"
+      },
+      "1": {
+        "name": "任务 ID",
+        "tooltip": "这一单的任务 ID，可以填进“取回视频”节点"
+      },
+      "2": {
+        "name": "状态",
+        "tooltip": "任务进展和结果"
+      }
+    }
+  },
+  "InferwayH3Generate": {
+    "display_name": "Inferway H3 生成视频（旧版）",
+    "description": "用 Inferway 的 H3 模型生成视频",
+    "inputs": {
+      "model": {
+        "name": "模型",
+        "tooltip": "要用的视频模型"
+      },
+      "prompt": {
+        "name": "提示词",
+        "tooltip": "描述你想要的画面"
+      },
+      "duration_seconds": {
+        "name": "时长（秒）",
+        "tooltip": "视频长度，5–10 秒。按秒计费，价格见 https://inferway.ai/zh/pricing"
+      },
+      "resolution": {
+        "name": "分辨率",
+        "tooltip": "default 是横屏 1344×768；也可以选 1344x768（横屏）或 768x1344（竖屏）"
+      },
+      "seed": {
+        "name": "随机种",
+        "tooltip": "可选，填十进制整数（0 到 18446744073709551615）；留空就不传 seed。"
+      },
+      "first_frame": {
+        "name": "首帧",
+        "tooltip": "成片从这张图开始。不能和参考图同时用"
+      },
+      "last_frame": {
+        "name": "尾帧",
+        "tooltip": "成片停在这张图上，要和首帧一起用"
+      },
+      "ref_image_1": {
+        "name": "参考图 1",
+        "tooltip": "成片会参考图里的人物或场景，最多 3 张。不能和首尾帧同时用"
+      },
+      "ref_image_2": {
+        "name": "参考图 2",
+        "tooltip": "成片会参考图里的人物或场景，最多 3 张。不能和首尾帧同时用"
+      },
+      "ref_image_3": {
+        "name": "参考图 3",
+        "tooltip": "成片会参考图里的人物或场景，最多 3 张。不能和首尾帧同时用"
+      },
+      "profile": {
+        "name": "profile",
+        "tooltip": "用哪个 API key。在“设置 → Inferway”或 Inferway 菜单里添加、切换。"
+      },
+      "wait_timeout_seconds": {
+        "name": "最长等待（秒）",
+        "tooltip": "本地最多等多久。填 0 自动等（最长 7200 秒），也可以填 60–7200。等到上限只是不再等，任务不会取消，完成后照常扣费。"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "视频",
+        "tooltip": "生成的视频"
+      },
+      "1": {
+        "name": "任务 ID",
+        "tooltip": "这一单的任务 ID，可以填进“取回视频”节点"
+      },
+      "2": {
+        "name": "状态",
+        "tooltip": "任务进展和结果"
+      }
+    }
+  },
+  "InferwayH3Resume": {
+    "display_name": "Inferway H3 取回视频",
+    "description": "接着等一个已经下过的单，或者重新下载它的视频。不会新下单",
+    "inputs": {
+      "interaction_id": {
+        "name": "任务 ID",
+        "tooltip": "要取回的任务 ID"
+      },
+      "profile": {
+        "name": "profile",
+        "tooltip": "用哪个 API key。在“设置 → Inferway”或 Inferway 菜单里添加、切换。"
+      },
+      "wait_timeout_seconds": {
+        "name": "最长等待（秒）",
+        "tooltip": "本地最多等多久。填 0 自动等（最长 7200 秒），也可以填 60–7200。等到上限只是不再等，任务不会取消，完成后照常扣费。"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "视频",
+        "tooltip": "取回的视频"
+      },
+      "1": {
+        "name": "任务 ID",
+        "tooltip": "这一单的任务 ID，可以填进“取回视频”节点"
+      },
+      "2": {
+        "name": "状态",
+        "tooltip": "任务进展和结果"
+      }
+    }
+  },
+  "InferwayH3Cancel": {
+    "display_name": "Inferway H3 取消任务",
+    "description": "取消一个还在远端排队或生成的视频任务",
+    "inputs": {
+      "interaction_id": {
+        "name": "任务 ID",
+        "tooltip": "要取消的任务 ID"
+      },
+      "profile": {
+        "name": "profile",
+        "tooltip": "用哪个 API key。在“设置 → Inferway”或 Inferway 菜单里添加、切换。"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "任务 ID",
+        "tooltip": "这一单的任务 ID"
+      },
+      "1": {
+        "name": "结果",
+        "tooltip": "取消结果，以及有没有扣费"
+      }
+    }
+  },
+  "InferwayH3History": {
+    "display_name": "Inferway H3 任务记录",
+    "description": "列出这个账户最近的视频任务。只是查看：不会生成下载链接，也不会下单",
+    "inputs": {
+      "profile": {
+        "name": "profile",
+        "tooltip": "用哪个 API key。在“设置 → Inferway”或 Inferway 菜单里添加、切换。"
+      },
+      "limit": {
+        "name": "条数",
+        "tooltip": "列出最近多少条（1–50）"
+      },
+      "state": {
+        "name": "状态",
+        "tooltip": "按状态筛选；all 表示不筛选"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "记录",
+        "tooltip": "每行一条：创建时间（UTC，精确到分钟）、状态、模式、时长、扣费、能否下载、任务 ID、提示词开头"
+      },
+      "1": {
+        "name": "最近可取回的任务 ID",
+        "tooltip": "最近一条成功、而且还能下载的任务；没有就为空。可以直接连到“取回视频”节点"
+      }
+    }
+  },
+  "InferwayPromptExpand": {
+    "display_name": "Inferway 提示词扩写（MiMo）",
+    "description": "用 inferway/mimo-v2.6-flash 把一句简短的想法扩写成能直接用的视频提示词，按 token 从这个 profile 的余额扣费。输入不变时再运行，ComfyUI 通常直接用缓存；重启、用了 --cache-none 或缓存被清掉后会重新扣费",
+    "inputs": {
+      "profile": {
+        "name": "profile",
+        "tooltip": "用哪个 API key 的余额付扩写的费用。在“设置 → Inferway”或 Inferway 菜单里添加、切换。"
+      },
+      "idea": {
+        "name": "想法",
+        "tooltip": "一句简短的想法，会扩写成完整的视频提示词"
+      },
+      "language": {
+        "name": "语言",
+        "tooltip": "提示词用什么语言；auto 表示跟想法的语言一致"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "提示词",
+        "tooltip": "能直接接到“生成视频”节点的视频提示词"
+      }
+    }
+  }
+}

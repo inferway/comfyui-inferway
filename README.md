@@ -5,7 +5,7 @@ Native ComfyUI custom node extension for [Inferway](https://inferway.ai) H3 vide
 > [!NOTE]
 > **Package**: Published to the ComfyUI Registry as package ID `inferway-comfy` (PublisherId `inferway`, DisplayName `Inferway H3`). Source repository: https://github.com/inferway/comfyui-inferway
 >
-> **Production Acceptance & Verification Boundaries**: Authorized real production acceptance was completed on 2026-09-21 for `inferway/minimax-h3-768p` on Linux (Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6). macOS has not yet been independently verified. On Windows, 0.1.2 and earlier could not download a finished video (see Section 7.2); 0.1.3 fixes this, and its client package suites run on Windows in CI. Real production validation demonstrated exactly one paid create across Generate, Resume, and Cancel workflows. See [Section 7](#7-production-acceptance-evidence--verification-boundaries) for complete verified evidence and boundaries.
+> **Production Acceptance & Verification Boundaries**: Authorized real production acceptance was completed on 2026-09-21 for `inferway/minimax-h3-768p` on Linux (Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6). macOS has not yet been independently verified. On Windows, 0.1.2 and earlier could not download a finished video (see Section 7.2); 0.1.3 fixes this, and its client package suites run on Windows in CI. 0.1.4 ran end to end on a real Windows 11 host (ComfyUI 0.37.0): a key saved from the in-app dialog, Prompt Expand into Generate, then History into Resume. Real production validation demonstrated exactly one paid create across Generate, Resume, and Cancel workflows. See [Section 7](#7-production-acceptance-evidence--verification-boundaries) for complete verified evidence and boundaries.
 
 ---
 
@@ -45,6 +45,14 @@ Alternatively, install the package in editable mode:
 /path/to/ComfyUI/.venv/bin/python -m pip install -e /path/to/ComfyUI/custom_nodes/inferway-comfy
 ```
 
+### 1.3 Updates
+
+From 0.1.6 the node pack tells you when a newer version is published. At most once a day the browser reads the version line of [`pyproject.toml`](https://raw.githubusercontent.com/inferway/comfyui-inferway/main/pyproject.toml) on this repository's `main` branch, which is what ComfyUI-Manager installs, and shows a notice once per new version. The request sends no cookie, referrer or API key, and a failure is silent. Turn it off under **Settings → Inferway → Updates**.
+
+To update, use **Update** on Inferway H3 in ComfyUI-Manager, or run `git pull` in the node folder if you cloned it, then restart ComfyUI.
+
+Requests to the Inferway API carry `User-Agent: inferway-comfy/<version>`, so Inferway can tell which plugin versions are still in use.
+
 ---
 
 ## 2. Server-Side Key Configuration & Security
@@ -60,7 +68,7 @@ Inferway nodes use a strict server-side credentials boundary to protect API keys
 2. **Restart ComfyUI**: Restart your ComfyUI server so the process picks up the environment variable.
 3. **No UI or Workflow Leaks**: ComfyUI frontend nodes **never** expose API key inputs, tokens, custom backend URLs, or secret paths — only a `profile` **name** dropdown whose options are read server-side from the local store. Saved workflow JSON files will not contain credentials, preventing accidental leaks when sharing workflows.
 4. **No Cloud Credentials Required**: No AWS credentials, SQS endpoints, or third-party storage secrets are required for clients.
-5. **Machine-Local Profile Store (Security Note)**: a key saved from the in-app dialog (**Inferway → Manage Inferway API key**) is written to `user/__inferway/credentials.json` inside ComfyUI's system-user directory, which no HTTP route serves. The file is created owner-only (`0600`/`0700` on POSIX; `icacls`-restricted to the current user on Windows), never stored in `comfy.settings.json`, workflow files or PNG metadata, and never logged. Profile edits are refused for any non-loopback client unless `INFERWAY_ALLOW_REMOTE_KEY_EDIT=1` is set deliberately.
+5. **Machine-Local Profile Store (Security Note)**: a key saved from the in-app dialog (**Inferway → Manage Inferway API key**) is written to `user/__inferway/credentials.json` inside ComfyUI's system-user directory, which no HTTP route serves. The file is created owner-only (`0600`/`0700` on POSIX; `icacls`-restricted to the current user on Windows; 0.1.4 left the Windows file with its inherited permissions, so save the key once more after upgrading), never stored in `comfy.settings.json`, workflow files or PNG metadata, and never logged. Profile edits are refused for any non-loopback client unless `INFERWAY_ALLOW_REMOTE_KEY_EDIT=1` is set deliberately.
 
    > **Caveat**: the key store belongs to the whole ComfyUI installation, not to a ComfyUI login. Under ComfyUI's `--multi-user` mode the profiles are **not** isolated between users — everyone who can use that ComfyUI instance can select (and, on that machine, read) the same stored keys. Do not share a `--multi-user` instance between mutually untrusting parties.
 
@@ -234,6 +242,7 @@ The CLI lists IDs, model, status, creation time and source key name. It does not
 - **Video & Audio Preservation**: Video and audio streams are preserved when present in the delivered media result, and connect directly to the native `SaveVideo` node to produce MP4 files.
 - **Audio Verification & Fixture Scope**: The observed AAC result in production acceptance and test fixtures proves the tested audio handling and preservation in the client and `SaveVideo` pipeline, not that every future response is guaranteed to contain AAC audio.
 - **Secure Download & Integrity**: Result downloads verify byte count and SHA-256 against the result metadata returned by the authenticated API before caching.
+- **Log Hygiene**: httpx logs every request URL at INFO. A signed download link's query is replaced by `?<redacted>`, so `comfyui.log` never holds a working link to the video.
 - **Private Cache Leases**: Media cache files are stored in private temporary directories and held by `VIDEO` object references. Prompt cleanup clears execution registry records without prematurely removing video cache files referenced by downstream nodes.
 - **Windows**: Windows has no POSIX owner or permission bits, so the owner-only checks apply on Linux and macOS; on Windows the cache directory inherits the ACL of ComfyUI's temp directory. Downloads are written in binary mode. A cache file that a preview or save node still holds open is deleted later, at the latest when ComfyUI empties its temp directory on the next start.
 
@@ -241,31 +250,33 @@ The CLI lists IDs, model, status, creation time and source key name. It does not
 
 ## 6. Workflow Examples
 
-### 6.1 Importable Canvas Workflows
+### 6.1 Template Browser and Canvas Workflows
 
-Use **Ctrl+O** in ComfyUI to import one of the [canvas workflows](workflows/ui/README.md):
+After installing the node pack, click **Templates** in ComfyUI's left sidebar and pick **Inferway examples** under Extensions: every canvas workflow below is listed there with a preview, and one click loads it. You can also open one with **Ctrl+O** from [`example_workflows/`](example_workflows/README.md):
 
-- [Text to video](workflows/ui/t2v.json): Generate, save an MP4, and display the interaction ID.
-- [First and last frame](workflows/ui/first-last-frame.json): Load an opening and a closing image, generate the shot between them, and save an MP4. Available only while the live model catalog advertises the mode.
-- [Reference images](workflows/ui/reference-images.json): Load up to three reference images to keep the generated shot visually consistent with them. Available only while the live model catalog advertises the mode.
-- [Resume](workflows/ui/resume.json): Enter an existing interaction ID to retrieve its video without creating another task.
-- [Cancel](workflows/ui/cancel.json): Enter the target interaction ID and inspect the visible outcome and `charged` value.
-- [History](workflows/ui/history.json): List recent tasks on the canvas and hand the newest resumable interaction ID straight to Resume.
-- [Prompt expand](workflows/ui/prompt-expand-t2v.json): Expand a short idea with MiMo and feed the result into Generate.
+- [Text to video](<example_workflows/Inferway Text to Video.json>): Generate, save an MP4, and display the interaction ID.
+- [First and last frame](<example_workflows/Inferway First and Last Frame.json>): Load an opening and a closing image, generate the shot between them, and save an MP4. Available only while the live model catalog advertises the mode.
+- [Reference images](<example_workflows/Inferway Reference Images.json>): Load up to three reference images to keep the generated shot visually consistent with them. Available only while the live model catalog advertises the mode.
+- [Resume](<example_workflows/Inferway Resume.json>): Enter an existing interaction ID to retrieve its video without creating another task.
+- [Cancel](<example_workflows/Inferway Cancel.json>): Enter the target interaction ID and inspect the visible outcome and `charged` value.
+- [History](<example_workflows/Inferway History.json>): List recent tasks on the canvas and hand the newest resumable interaction ID straight to Resume.
+- [Prompt expand](<example_workflows/Inferway Prompt Expand.json>): Expand a short idea with MiMo and feed the result into Generate.
 
-Generate/Resume/Cancel node paths were exercised against production, while the importable canvas JSON files were separately validated in native ComfyUI (0.37.0, frontend 1.53.6) against the loopback API.
+The image workflows open with empty `LoadImage` nodes outlined in red until you choose your own images; that is ComfyUI's normal missing-input marker.
+
+Generate/Resume/Cancel node paths were exercised against production, while the canvas JSON files were separately validated in native ComfyUI (0.37.0, frontend 1.53.6) against the loopback API.
 
 ### 6.2 API-format Workflows
 
-Sample API-format workflow definitions are included in the [`workflows/`](workflows/) directory:
+Sample API-format workflow definitions are included in the [`api_workflows/`](api_workflows/) directory. They are for the ComfyUI HTTP API, not for the canvas, so they are kept out of the template browser:
 
-1. [`workflows/t2v.json`](workflows/t2v.json): Text-to-video workflow (`InferwayH3GenerateV2` -> `SaveVideo`).
-2. [`workflows/first-last-frame.json`](workflows/first-last-frame.json): First and last frame video workflow.
-3. [`workflows/reference-images.json`](workflows/reference-images.json): Multi-image reference video workflow.
-4. [`workflows/resume.json`](workflows/resume.json): Resumption workflow (`InferwayH3Resume` -> `SaveVideo`).
-5. [`workflows/cancel.json`](workflows/cancel.json): Explicit remote cancellation workflow (`InferwayH3Cancel`).
-6. [`workflows/history.json`](workflows/history.json): Recent-history workflow (`InferwayH3History` -> `InferwayH3Resume` -> `SaveVideo`).
-7. [`workflows/prompt-expand-t2v.json`](workflows/prompt-expand-t2v.json): Prompt expansion workflow (`InferwayPromptExpand` -> `InferwayH3GenerateV2` -> `SaveVideo`).
+1. [`api_workflows/t2v.json`](api_workflows/t2v.json): Text-to-video workflow (`InferwayH3GenerateV2` -> `SaveVideo`).
+2. [`api_workflows/first-last-frame.json`](api_workflows/first-last-frame.json): First and last frame video workflow.
+3. [`api_workflows/reference-images.json`](api_workflows/reference-images.json): Multi-image reference video workflow.
+4. [`api_workflows/resume.json`](api_workflows/resume.json): Resumption workflow (`InferwayH3Resume` -> `SaveVideo`).
+5. [`api_workflows/cancel.json`](api_workflows/cancel.json): Explicit remote cancellation workflow (`InferwayH3Cancel`).
+6. [`api_workflows/history.json`](api_workflows/history.json): Recent-history workflow (`InferwayH3History` -> `InferwayH3Resume` -> `SaveVideo`).
+7. [`api_workflows/prompt-expand-t2v.json`](api_workflows/prompt-expand-t2v.json): Prompt expansion workflow (`InferwayPromptExpand` -> `InferwayH3GenerateV2` -> `SaveVideo`).
 
 ### Submitting API Format Workflows
 
@@ -274,7 +285,7 @@ These workflow files are raw **ComfyUI API format graphs**. To submit via the Co
 ```bash
 curl -X POST http://127.0.0.1:8188/prompt \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\": $(cat workflows/t2v.json)}"
+  -d "{\"prompt\": $(cat api_workflows/t2v.json)}"
 ```
 
 > [!NOTE]

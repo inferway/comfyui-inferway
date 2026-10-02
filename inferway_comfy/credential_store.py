@@ -200,6 +200,10 @@ def _restrict_windows_acl(path: Path, *, is_directory: bool = False) -> bool:
     principal = _windows_identity()
     if not principal:
         return False
+    # icacls takes a bare "S-1-..." for an account NAME and fails with "No
+    # mapping between account names and security IDs"; a SID needs "*".
+    if principal.startswith("S-1-"):
+        principal = f"*{principal}"
     grant = f"{principal}:(OI)(CI)F" if is_directory else f"{principal}:F"
     try:
         res = subprocess.run(

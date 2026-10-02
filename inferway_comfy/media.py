@@ -30,6 +30,48 @@ _IS_WINDOWS = os.name == "nt"
 
 _logger = logging.getLogger(__name__)
 
+# Query keys that mark a URL as signed: S3/R2 presigned (X-Amz-*), generic
+# Signature/Credential/token. Any one of them redacts the whole query.
+_SIGNED_QUERY_KEY_RE = re.compile(
+    r"(?i)(?:^|&)(?:x-amz-[a-z-]+|signature|sig|credential|token|access_token)="
+)
+
+
+def _redact_signed_url(value: object) -> object:
+    """``value`` with a signed query replaced by ``?<redacted>``; else as is."""
+    if not isinstance(value, (httpx.URL, str)):
+        return value
+    text = str(value)
+    base, sep, query = text.partition("?")
+    if not sep or not _SIGNED_QUERY_KEY_RE.search(query):
+        return value
+    return f"{base}?<redacted>"
+
+
+class _SignedUrlLogFilter(logging.Filter):
+    """Keep signed download URLs out of ComfyUI's log.
+
+    httpx logs every request line at INFO with the full URL. A presigned
+    download URL in comfyui.log hands the finished video to anyone who reads
+    the log until the link expires. Only a query that looks signed is cut, so
+    other httpx users in the same process keep their log lines.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and args:
+            record.args = tuple(_redact_signed_url(arg) for arg in args)
+        return True
+
+
+def _install_signed_url_log_filter() -> None:
+    httpx_logger = logging.getLogger("httpx")
+    if not any(isinstance(f, _SignedUrlLogFilter) for f in httpx_logger.filters):
+        httpx_logger.addFilter(_SignedUrlLogFilter())
+
+
+_install_signed_url_log_filter()
+
 
 def _part_open_flags() -> int:
     # O_BINARY: the Windows CRT opens fds in text mode by default and would

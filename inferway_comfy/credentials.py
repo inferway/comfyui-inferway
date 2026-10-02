@@ -16,6 +16,7 @@ from .credential_store import (
     is_valid_profile_name,
     normalize_api_key,
 )
+from .version import USER_AGENT
 
 _logger = logging.getLogger(__name__)
 
@@ -257,7 +258,10 @@ def create_http_client(
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
         raise ClientError("invalid_timeout")
     finite_timeout = httpx.Timeout(timeout, connect=10.0)
-    headers = {"Authorization": f"Bearer {settings.api_key}"}
+    headers = {
+        "Authorization": f"Bearer {settings.api_key}",
+        "User-Agent": USER_AGENT,
+    }
     return httpx.AsyncClient(
         base_url=settings.api_origin,
         headers=headers,

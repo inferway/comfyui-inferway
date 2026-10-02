@@ -1,0 +1,8 @@
+{
+  "templateWorkflows": {
+    "category": {
+      "inferway-comfy": "Inferway examples",
+      "comfyui-inferway": "Inferway examples"
+    }
+  }
+}

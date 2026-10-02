@@ -36,7 +36,7 @@
       "properties": {
         "Node name for S&R": "InferwayH3Cancel",
         "cnr_id": "inferway-comfy",
-        "ver": "0.1.4"
+        "ver": "0.1.6"
       },
       "widgets_values": [
         "YOUR_INTERACTION_ID",

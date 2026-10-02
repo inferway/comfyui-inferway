@@ -14,10 +14,14 @@ interaction ids and hand-written sentences are interpolated.
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 from dataclasses import dataclass
 from typing import Any
+
+from .contracts import ContractError
+from .credentials import ClientError
 
 __all__ = [
     "BILLING_URL",
@@ -432,6 +436,22 @@ _MESSAGES: dict[str, tuple[str, str]] = {
         "任务列表返回的数据不符合预期",
         "The task list response had an unexpected shape",
     ),
+    "invalid_history_state": (
+        "筛选条件不对：只能选 all、succeeded、failed 等列表里给出的状态",
+        "Invalid state filter: pick one of the listed states, such as all, succeeded or failed",
+    ),
+    "empty_idea": (
+        "先写一句想法再运行，比如“雨夜街头的一只纸船”",
+        'Write a short idea first, for example "a paper boat on a rainy street"',
+    ),
+    "invalid_language": (
+        "语言只能选 auto、zh 或 en",
+        "Language must be auto, zh or en",
+    ),
+    "empty_completion": (
+        "提示词扩写没有返回内容，这次没有生成视频。可以再运行一次，或者直接手写提示词",
+        "Prompt expansion returned nothing, so no video was ordered. Run it again or write the prompt yourself",
+    ),
     "create_ambiguous": (
         (
             "下单结果不确定：请求可能已经到达服务端，订单也许已经建立。先用 "
@@ -809,3 +829,24 @@ def describe_status(
     if text is None:
         return StatusReport("任务状态未知\nUnknown state")
     return StatusReport(text)
+
+
+def bilingual_errors(func: Any) -> Any:
+    """Turn every closed code a node raises into customer-readable text.
+
+    ``human_message`` is a no-op on a string that is already rendered, so a
+    site that already composed a sentence with an interaction id keeps it.
+    Lives here, not in runtime, so nodes that must not import torch/av can
+    use it too.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except ContractError as exc:
+            raise ContractError(human_message(str(exc))) from None
+        except ClientError as exc:
+            raise ContractError(human_message(exc.code)) from None
+
+    return wrapper

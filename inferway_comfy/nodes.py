@@ -59,13 +59,19 @@ class InferwayH3Generate(io.ComfyNode):
                     default=5,
                     min=5,
                     max=10,
-                    tooltip="Video duration in seconds",
+                    tooltip=(
+                        "Video length, 5-10 seconds. Billed per second; "
+                        "prices: https://inferway.ai/pricing"
+                    ),
                 ),
                 io.Combo.Input(
                     "resolution",
                     options=["default", "1344x768", "768x1344"],
                     default="default",
-                    tooltip="Video resolution",
+                    tooltip=(
+                        "default is landscape 1344x768; or pick 1344x768 "
+                        "(landscape) or 768x1344 (portrait)"
+                    ),
                 ),
                 io.String.Input(
                     "seed",
@@ -193,13 +199,19 @@ class InferwayH3GenerateV2(io.ComfyNode):
                     default=5,
                     min=5,
                     max=10,
-                    tooltip="Video duration in seconds",
+                    tooltip=(
+                        "Video length, 5-10 seconds. Billed per second; "
+                        "prices: https://inferway.ai/pricing"
+                    ),
                 ),
                 io.Combo.Input(
                     "resolution",
                     options=["default", "1344x768", "768x1344"],
                     default="default",
-                    tooltip="Video resolution",
+                    tooltip=(
+                        "default is landscape 1344x768; or pick 1344x768 "
+                        "(landscape) or 768x1344 (portrait)"
+                    ),
                 ),
                 io.Int.Input(
                     "seed",

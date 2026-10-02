@@ -1,0 +1,11 @@
+{
+  "templateWorkflows": {
+    "category": {
+      "inferway-comfy": "Inferway 示例",
+      "comfyui-inferway": "Inferway 示例"
+    }
+  },
+  "settingsCategories": {
+    "Updates": "更新提醒"
+  }
+}

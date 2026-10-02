@@ -70,7 +70,7 @@
       "properties": {
         "Node name for S&R": "InferwayH3GenerateV2",
         "cnr_id": "inferway-comfy",
-        "ver": "0.1.4"
+        "ver": "0.1.6"
       },
       "widgets_values": [
         "inferway/minimax-h3-768p",

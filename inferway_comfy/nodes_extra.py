@@ -18,6 +18,7 @@ from .client import create_client
 from .contracts import ContractError
 from .credential_store import is_valid_profile_name, profile_choices
 from .credentials import load_settings
+from .messages import bilingual_errors
 
 _logger = logging.getLogger(__name__)
 
@@ -240,6 +241,7 @@ class InferwayH3History(io.ComfyNode):
         return float("nan")
 
     @classmethod
+    @bilingual_errors
     async def execute(
         cls,
         profile: str = "default",
@@ -341,6 +343,7 @@ class InferwayPromptExpand(io.ComfyNode):
     # the same idea expands once, so re-queuing does not bill the same tokens.
 
     @classmethod
+    @bilingual_errors
     async def execute(
         cls,
         profile: str = "default",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import functools
 import hashlib
 import io
 import logging
@@ -54,6 +53,7 @@ from .execution import (
 )
 from .media import MediaCache, download_result, upload_image
 from .messages import (
+    bilingual_errors,
     create_uncertain_message,
     describe_status,
     failure_message,
@@ -97,23 +97,8 @@ def validate_interaction_id(interaction_id: object) -> str:
     return interaction_id
 
 
-def _bilingual_errors(func: Any) -> Any:
-    """Turn every closed code a node raises into customer-readable text.
-
-    ``human_message`` is a no-op on a string that is already rendered, so a
-    site that already composed a sentence with an interaction id keeps it.
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return await func(*args, **kwargs)
-        except ContractError as exc:
-            raise ContractError(human_message(str(exc))) from None
-        except ClientError as exc:
-            raise ContractError(human_message(exc.code)) from None
-
-    return wrapper
+# Shared with nodes_extra, which must not import this module (torch/av).
+_bilingual_errors = bilingual_errors
 
 
 def _send_progress_text(text: str, node_id: str) -> None:
