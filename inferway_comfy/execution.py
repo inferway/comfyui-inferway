@@ -6,6 +6,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 import time
 import weakref
 from collections.abc import Awaitable, Callable
@@ -14,6 +15,38 @@ from typing import Any
 
 from .client import KNOWN_STATES, InferwayClient
 from .credentials import ClientError
+
+_logger = logging.getLogger(__name__)
+
+# ``wait_timeout_seconds`` semantics: 0 means "wait on the queue automatically",
+# anything else is an explicit local deadline in seconds. A video order is
+# rendered serially behind every order ahead of it, so a fixed limit that used to
+# be long enough still cuts customers off mid-queue.
+AUTO_WAIT_TIMEOUT = 0
+AUTO_WAIT_MAX_SECONDS = 7200
+WAIT_TIMEOUT_MIN_SECONDS = 60
+WAIT_TIMEOUT_MAX_SECONDS = 7200
+
+# A status callback must never be able to break polling: orders keep running
+# and keep billing whether or not the UI is listening.
+StatusCallback = Callable[[dict], None]
+
+
+def is_valid_wait_timeout(value: Any) -> bool:
+    """True for the auto marker (0) or an explicit limit in [60, 7200].
+
+    ``type(...) is int`` keeps ``True``/``False`` out: bool is an int subclass
+    and would otherwise pass as 1.
+    """
+    return type(value) is int and (
+        value == AUTO_WAIT_TIMEOUT
+        or WAIT_TIMEOUT_MIN_SECONDS <= value <= WAIT_TIMEOUT_MAX_SECONDS
+    )
+
+
+def resolve_wait_timeout(value: int) -> int:
+    """Turn a validated ``wait_timeout_seconds`` into a local deadline in seconds."""
+    return AUTO_WAIT_MAX_SECONDS if value == AUTO_WAIT_TIMEOUT else value
 
 
 @dataclass(frozen=True)
@@ -190,6 +223,7 @@ async def wait_for_result(
     deadline: float,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    on_status: StatusCallback | None = None,
 ) -> dict:
     """Poll interaction status until completion or deadline.
 
@@ -197,9 +231,25 @@ async def wait_for_result(
     Temporary network/429/5xx delays are bounded at 30 seconds unless a longer
     Retry-After is specified, always constrained by the remaining local deadline.
     A deadline stops waiting with WaitTimeoutError without calling cancel or create.
+
+    Every payload that arrives is handed to ``on_status`` before the next step.
+    The callback is advisory: any exception it raises is logged and swallowed so
+    a dead PromptServer cannot abort a live order.
     """
     poll_delay = 2.0
     error_delay = 2.0
+
+    def report(payload: dict) -> None:
+        if on_status is None:
+            return
+        try:
+            on_status(payload)
+        except Exception as exc:  # noqa: BLE001
+            _logger.debug(
+                "Inferway status callback failed for %s: %s",
+                interaction_id,
+                type(exc).__name__,
+            )
 
     while True:
         now = clock()
@@ -220,6 +270,8 @@ async def wait_for_result(
             state = payload.get("state")
             if not isinstance(state, str) or state not in KNOWN_STATES:
                 raise ClientError("unknown_state")
+
+            report(payload)
 
             if state in ("succeeded", "failed", "cancelled"):
                 if state == "succeeded":

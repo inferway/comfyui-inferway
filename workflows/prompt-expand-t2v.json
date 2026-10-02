@@ -1,9 +1,20 @@
 {
   "1": {
+    "class_type": "InferwayPromptExpand",
+    "inputs": {
+      "profile": "default",
+      "idea": "A lone lighthouse keeper bars the door as the storm rolls in",
+      "language": "auto"
+    }
+  },
+  "2": {
     "class_type": "InferwayH3GenerateV2",
     "inputs": {
       "model": "inferway/minimax-h3-768p",
-      "prompt": "A cinematic shot of a majestic waterfall cascading down a lush green mountain cliff at sunrise, photorealistic, 4k",
+      "prompt": [
+        "1",
+        0
+      ],
       "duration_seconds": 5,
       "resolution": "default",
       "seed": 42,
@@ -11,14 +22,14 @@
       "wait_timeout_seconds": 0
     }
   },
-  "2": {
+  "3": {
     "class_type": "SaveVideo",
     "inputs": {
       "video": [
-        "1",
+        "2",
         0
       ],
-      "filename_prefix": "video/t2v",
+      "filename_prefix": "video/prompt-expand-t2v",
       "format": "mp4"
     }
   }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import math
 import os
 import re
@@ -21,6 +22,26 @@ from .contracts import SHA256_HEX_RE, ContractError, DownloadSpec
 UPLOAD_PATH_RE = re.compile(
     r"^/v1/interactions/uploads/iup_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$"
 )
+
+# Windows has no POSIX uid or permission bits: st_uid is always 0 and a
+# directory reports 0o777. Private-cache posture there is the user-profile
+# ACL that ComfyUI's temp directory inherits (spec §7.1).
+_IS_WINDOWS = os.name == "nt"
+
+_logger = logging.getLogger(__name__)
+
+
+def _part_open_flags() -> int:
+    # O_BINARY: the Windows CRT opens fds in text mode by default and would
+    # rewrite every 0x0A in the video as 0x0D 0x0A. CPython's tempfile adds
+    # it for the same reason. O_NOFOLLOW does not exist on Windows.
+    return (
+        os.O_CREAT
+        | os.O_EXCL
+        | os.O_WRONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
 
 
 def _validate_origin(origin: str, development_mode: bool) -> urllib.parse.SplitResult:
@@ -239,10 +260,11 @@ async def download_result(
 
     try:
         parent_st = destination.parent.stat()
-        if parent_st.st_uid != os.getuid():
-            raise ContractError("not_owner")
-        if stat.S_IMODE(parent_st.st_mode) & 0o077:
-            raise ContractError("invalid_permissions")
+        if not _IS_WINDOWS:
+            if parent_st.st_uid != os.getuid():
+                raise ContractError("not_owner")
+            if stat.S_IMODE(parent_st.st_mode) & 0o077:
+                raise ContractError("invalid_permissions")
     except OSError:
         raise ContractError("io_error") from None
 
@@ -252,9 +274,7 @@ async def download_result(
     part_path = destination.with_name(f"{destination.name}.{uuid.uuid4().hex}.part")
 
     try:
-        fd = os.open(
-            part_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600
-        )
+        fd = os.open(part_path, _part_open_flags(), 0o600)
     except FileExistsError:
         raise ContractError("part_exists") from None
     except OSError:
@@ -323,9 +343,21 @@ async def download_result(
         except FileExistsError:
             raise ContractError("destination_exists") from None
         except OSError:
-            raise ContractError("io_error") from None
-
-        os.remove(part_path)
+            if not _IS_WINDOWS:
+                raise ContractError("io_error") from None
+            # Windows on FAT32/exFAT (and some network shares) has no hard
+            # links. os.rename is exclusive there too: it raises
+            # FileExistsError when the destination exists, so the contract
+            # stays the same. POSIX keeps os.link only, because POSIX rename
+            # would silently overwrite an existing destination.
+            try:
+                os.rename(part_path, destination)
+            except FileExistsError:
+                raise ContractError("destination_exists") from None
+            except OSError:
+                raise ContractError("io_error") from None
+        else:
+            os.remove(part_path)
     except BaseException:
         try:
             os.remove(part_path)
@@ -350,7 +382,9 @@ class CacheLease:
             st = self.path.lstat()
         except OSError:
             raise ContractError("cache_file_unavailable") from None
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+        if not stat.S_ISREG(st.st_mode):
+            raise ContractError("invalid_cache_file")
+        if not _IS_WINDOWS and st.st_uid != os.getuid():
             raise ContractError("invalid_cache_file")
         identity = (st.st_dev, st.st_ino)
         if (
@@ -378,6 +412,9 @@ class MediaCache:
         self.root = root.absolute()
         self.max_total_bytes = max_total_bytes
         self._active_leases: dict[Path, int] = {}
+        # Windows: files ComfyUI still holds open cannot be unlinked. They are
+        # parked here and retried on the next allocate() or cleanup pass.
+        self._deferred_unlinks: set[Path] = set()
 
         p = self.root
         while True:
@@ -400,16 +437,18 @@ class MediaCache:
         except OSError:
             raise ContractError("io_error") from None
 
-        if st.st_uid != os.getuid():
-            raise ContractError("not_owner")
+        if not _IS_WINDOWS:
+            if st.st_uid != os.getuid():
+                raise ContractError("not_owner")
 
-        if stat.S_IMODE(st.st_mode) != 0o700:
-            raise ContractError("invalid_permissions")
+            if stat.S_IMODE(st.st_mode) != 0o700:
+                raise ContractError("invalid_permissions")
 
     def _get_budget(self) -> int:
         return sum(self._active_leases.values())
 
     def allocate(self, size: int) -> CacheLease:
+        self.retry_deferred_unlinks()
         if type(size) is not int or isinstance(size, bool) or size <= 0:
             raise ContractError("invalid_size")
 
@@ -433,8 +472,32 @@ class MediaCache:
                     del self._active_leases[path]
                 except FileNotFoundError:
                     del self._active_leases[path]
+                except PermissionError:
+                    if not _IS_WINDOWS:
+                        # Preserve reservation and allow a later release retry.
+                        raise ContractError("cache_cleanup_failed") from None
+                    # Windows keeps the file open while ComfyUI previews or
+                    # saves it; free the budget now and delete it later.
+                    self._deferred_unlinks.add(path)
+                    del self._active_leases[path]
+                    _logger.debug("Deferred cache unlink, file still open: %s", path)
                 except OSError:
                     # Preserve reservation and allow a later release retry.
                     raise ContractError("cache_cleanup_failed") from None
             else:
                 del self._active_leases[path]
+
+    def retry_deferred_unlinks(self) -> None:
+        """Best-effort removal of files parked because Windows held them open."""
+        for path in list(self._deferred_unlinks):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                self._deferred_unlinks.discard(path)
+            except PermissionError:
+                # Still open by a preview/save node; retried on a later pass.
+                continue
+            except OSError:
+                continue
+            else:
+                self._deferred_unlinks.discard(path)

@@ -4,7 +4,7 @@
     "inputs": {
       "interaction_id": "YOUR_INTERACTION_ID",
       "profile": "default",
-      "wait_timeout_seconds": 600
+      "wait_timeout_seconds": 0
     }
   },
   "2": {

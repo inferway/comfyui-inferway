@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import functools
 import hashlib
 import io
 import logging
@@ -36,24 +37,56 @@ from .contracts import (
     validate_create,
     validate_media_slots,
 )
+from .credential_store import is_valid_profile_name
 from .credentials import ClientError, ClientSettings, load_settings
 from .execution import (
+    AUTO_WAIT_TIMEOUT,
+    WAIT_TIMEOUT_MIN_SECONDS,
     ExecutionConflict,
     ExecutionRecord,
     ExecutionRegistry,
     ExecutionSlot,
+    StatusCallback,
     WaitTimeoutError,
+    is_valid_wait_timeout,
+    resolve_wait_timeout,
     wait_for_result,
 )
 from .media import MediaCache, download_result, upload_image
+from .messages import (
+    create_uncertain_message,
+    describe_status,
+    failure_message,
+    human_message,
+    interrupt_message,
+    is_closed_code,
+    order_placed_failure,
+)
 
 _logger = logging.getLogger(__name__)
+
+# Windows has no POSIX uid or permission bits (see media._IS_WINDOWS). The
+# runtime keeps its own flag so each module can be patched independently.
+_IS_WINDOWS = os.name == "nt"
 
 VERIFIED_PRODUCTION_RESULT_ORIGIN = (
     "https://60a726db174bce17c89497b7184eb752.r2.cloudflarestorage.com"
 )
 
 INTERACTION_ID_RE = re.compile(r"^int_[0-9a-f]{32}$")
+
+# Codes a create request can fail with *without* the client knowing whether the
+# order reached the service. Only these (and Stop landing mid-create) may say
+# "the outcome is unknown"; every other failure is a definitive rejection.
+_CREATE_UNCERTAIN_CODES = frozenset(
+    {
+        "timeout",
+        "network_error",
+        "server_error",
+        "service_unavailable",
+        "create_ambiguous",
+    }
+)
 
 
 def validate_interaction_id(interaction_id: object) -> str:
@@ -62,6 +95,140 @@ def validate_interaction_id(interaction_id: object) -> str:
     if not INTERACTION_ID_RE.fullmatch(interaction_id):
         raise ContractError("invalid_interaction_id")
     return interaction_id
+
+
+def _bilingual_errors(func: Any) -> Any:
+    """Turn every closed code a node raises into customer-readable text.
+
+    ``human_message`` is a no-op on a string that is already rendered, so a
+    site that already composed a sentence with an interaction id keeps it.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except ContractError as exc:
+            raise ContractError(human_message(str(exc))) from None
+        except ClientError as exc:
+            raise ContractError(human_message(exc.code)) from None
+
+    return wrapper
+
+
+def _send_progress_text(text: str, node_id: str) -> None:
+    """Show one bilingual status line on the node.
+
+    Never raises: a dead or absent PromptServer must not be able to abort a
+    live, billable order.
+    """
+    try:
+        from server import PromptServer
+
+        instance = getattr(PromptServer, "instance", None)
+        if instance is None:
+            return
+        instance.send_progress_text(text, node_id)
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("Inferway progress text failed: %s", type(exc).__name__)
+
+
+# One ProgressBar per *wait*, held by the status callback that owns that wait.
+# Reusing a bar across runs would keep ComfyUI 0.37.0's ``_last_sent_value``
+# throttle armed, and the second run's smaller first value would never reach
+# the frontend.
+
+
+def _make_status_callback(
+    node_id: str | None,
+    *,
+    deadline: float,
+    auto_wait: bool,
+    interaction_id: str | None = None,
+) -> StatusCallback | None:
+    """Bridge one wait's ``op=get`` payloads to ComfyUI's progress surfaces."""
+    if node_id is None:
+        return None
+    node_id = str(node_id)
+    holder: dict[str, Any] = {}
+
+    def on_status(payload: dict) -> None:
+        report = describe_status(
+            payload,
+            remaining_seconds=deadline - time.monotonic(),
+            auto_wait=auto_wait,
+            interaction_id=interaction_id,
+        )
+        _send_progress_text(report.text, node_id)
+        if report.bar_value is None:
+            return
+        bar = holder.get("bar")
+        if bar is None:
+            from comfy.utils import ProgressBar
+
+            # node_id is resolved from the executing context by ComfyUI's hook,
+            # which keeps this working on builds whose ProgressBar has no such
+            # constructor argument.
+            bar = ProgressBar(report.bar_total)
+            holder["bar"] = bar
+        bar.update_absolute(report.bar_value, report.bar_total)
+
+    return on_status
+
+
+def _is_processing_interrupt(exc: BaseException) -> bool:
+    try:
+        from comfy.model_management import InterruptProcessingException
+    except Exception:  # noqa: BLE001
+        return False
+    return isinstance(exc, InterruptProcessingException)
+
+
+def _note_interrupt(node_id: str | None, interaction_id: str) -> None:
+    """Explain what Stop did *without* changing the exception ComfyUI catches."""
+    if node_id is None:
+        return
+    try:
+        _send_progress_text(interrupt_message(interaction_id), str(node_id))
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("Inferway interrupt note failed: %s", type(exc).__name__)
+
+
+def _note_create_uncertain(node_id: str | None, code: str) -> None:
+    """Stop landed mid-create: the order may exist, so say so on the node."""
+    if node_id is None:
+        return
+    try:
+        _send_progress_text(create_uncertain_message(code), str(node_id))
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("Inferway create note failed: %s", type(exc).__name__)
+
+
+def _order_placed_error(exc: BaseException, interaction_id: str) -> ContractError:
+    """Re-render a post-create failure so it never suggests a second order.
+
+    Text that is already rendered (the service's own terminal verdict, or a
+    local wait timeout) is passed through untouched -- those already say the
+    right thing and carry their own code line.
+    """
+    code = exc.code if isinstance(exc, ClientError) else str(exc)
+    if not is_closed_code(code):
+        return exc if isinstance(exc, ContractError) else ContractError(code)
+    if code.endswith(f"_{interaction_id}"):
+        code = code[: -(len(interaction_id) + 1)]
+    return ContractError(order_placed_failure(code, interaction_id))
+
+
+def _terminal_message(payload: dict, state: str, interaction_id: str) -> str:
+    failure = payload.get("failure")
+    if not isinstance(failure, dict):
+        failure = {}
+    return failure_message(
+        state,
+        interaction_id,
+        failure.get("charged"),
+        failure.get("message"),
+    )
 
 
 _registry = ExecutionRegistry()
@@ -90,10 +257,19 @@ def reset_runtime_state() -> None:
 
 def _cleanup_cache_dir() -> None:
     global _cache_dir, _cache
-    _cache = None
+    cache, _cache = _cache, None
     d = _cache_dir
     _cache_dir = None
     if d is not None and d.exists():
+        if cache is not None:
+            # Retry files Windows parked because ComfyUI still held them open.
+            cache.retry_deferred_unlinks()
+        if _IS_WINDOWS:
+            # ComfyUI empties its own temp directory on the next start, so a
+            # file still held open by a preview/save node may survive until
+            # then; ignore_errors covers exactly those locked files.
+            shutil.rmtree(d, ignore_errors=True)
+            return
         st = d.stat()
         if st.st_uid == os.getuid():
             shutil.rmtree(d)
@@ -107,6 +283,10 @@ def get_media_cache() -> MediaCache:
 
             base_tmp = Path(folder_paths.get_temp_directory())
             base_tmp.mkdir(parents=True, exist_ok=True)
+            # Resolve now that the directory exists: users commonly keep the
+            # ComfyUI temp directory behind a symlink/junction, and the cache
+            # rejects any symlink ancestor below this trusted root.
+            base_tmp = base_tmp.resolve()
         except Exception as e:
             raise RuntimeError("comfy_temp_directory_unavailable") from e
 
@@ -119,14 +299,15 @@ def get_media_cache() -> MediaCache:
         st = target_dir.lstat()
         if not stat.S_ISDIR(st.st_mode):
             raise RuntimeError("invalid_cache_directory")
-        if st.st_uid != os.getuid():
-            raise RuntimeError("unowned_cache_directory")
-        # mkdtemp creates an owner-only directory. Verify that boundary instead
-        # of broadening permissions if a restrictive umask or filesystem differs.
-        if stat.S_IMODE(st.st_mode) != 0o700:
-            # This newly created directory is empty; rmdir needs no read access.
-            target_dir.rmdir()
-            raise RuntimeError("invalid_cache_directory_permissions")
+        if not _IS_WINDOWS:
+            if st.st_uid != os.getuid():
+                raise RuntimeError("unowned_cache_directory")
+            # mkdtemp creates an owner-only directory. Verify that boundary instead
+            # of broadening permissions if a restrictive umask or filesystem differs.
+            if stat.S_IMODE(st.st_mode) != 0o700:
+                # This newly created directory is empty; rmdir needs no read access.
+                target_dir.rmdir()
+                raise RuntimeError("invalid_cache_directory_permissions")
         try:
             cache = MediaCache(target_dir)
         except Exception:
@@ -333,6 +514,7 @@ async def download_and_wrap_video(
                 )
 
 
+@_bilingual_errors
 async def execute_generate(
     model: str = "inferway/minimax-h3-768p",
     prompt: str = "",
@@ -345,24 +527,33 @@ async def execute_generate(
     ref_image_2: torch.Tensor | None = None,
     ref_image_3: torch.Tensor | None = None,
     profile: str = "default",
-    wait_timeout_seconds: int = 600,
+    wait_timeout_seconds: int = 0,
+    node_id: str | None = None,
+    legacy: bool = False,
     **extra: Any,
 ) -> tuple[Any, str, str]:
-    if profile != "default":
+    if not is_valid_profile_name(profile):
         raise ContractError("invalid_profile")
 
-    if (
-        type(wait_timeout_seconds) is not int
-        or isinstance(wait_timeout_seconds, bool)
-        or not (1 <= wait_timeout_seconds <= 3600)
-    ):
+    if legacy and type(wait_timeout_seconds) is int and 1 <= wait_timeout_seconds <= 59:
+        # 0.1.3 and older workflows saved 1-59 s; honour them as a 60 s wait
+        # rather than failing a workflow that used to run. V2 keeps the strict
+        # rule: it never shipped with those values.
+        wait_timeout_seconds = WAIT_TIMEOUT_MIN_SECONDS
+
+    if not is_valid_wait_timeout(wait_timeout_seconds):
         raise ContractError("invalid_wait_timeout")
+
+    auto_wait = wait_timeout_seconds == AUTO_WAIT_TIMEOUT
+    wait_budget = resolve_wait_timeout(wait_timeout_seconds)
 
     ctx = get_executing_context()
     if ctx is None or not ctx.prompt_id or not ctx.node_id:
         raise ContractError("missing_execution_context")
+    status_node_id = node_id if node_id is not None else str(ctx.node_id)
 
-    # Parse and validate seed
+    # Parse and validate seed. The legacy node hands over a decimal string (an
+    # empty one means "no seed pinned"); the V2 node always sends digits.
     seed_val: int | None = None
     if seed is not None and str(seed).strip() != "":
         s = str(seed).strip()
@@ -389,7 +580,7 @@ async def execute_generate(
         if width_val <= 0 or height_val <= 0:
             raise ContractError("invalid_resolution")
 
-    settings = load_settings(os.environ)
+    settings = load_settings(os.environ, profile=profile)
     slot = ExecutionSlot(
         origin=settings.api_origin,
         profile=settings.profile,
@@ -555,11 +746,23 @@ async def execute_generate(
             validated_final = validate_create(final_body, cap)
             record.bind(fingerprint, validated_final)
 
-            # Create if needed
+            # Create if needed. A create that fails without an answer may
+            # still have reached the service, so it must never say "run it
+            # again" -- there is no id to collect it with yet.
             if record.interaction_id is None:
-                create_resp = await run_interruptible(
-                    client.create(record.body, idempotency_key=record.key)
-                )
+                try:
+                    create_resp = await run_interruptible(
+                        client.create(record.body, idempotency_key=record.key)
+                    )
+                except (ClientError, ContractError) as exc:
+                    code = exc.code if isinstance(exc, ClientError) else str(exc)
+                    if code in _CREATE_UNCERTAIN_CODES:
+                        raise ContractError(create_uncertain_message(code)) from None
+                    raise
+                except BaseException as exc:
+                    if _is_processing_interrupt(exc):
+                        _note_create_uncertain(status_node_id, "interrupted")
+                    raise
                 raw_id = create_resp.get("id")
                 record.interaction_id = validate_interaction_id(raw_id)
                 _logger.info(
@@ -569,132 +772,186 @@ async def execute_generate(
                     create_resp.get("state"),
                 )
 
-            # Poll until completion or deadline
-            deadline = time.monotonic() + wait_timeout_seconds
+            # From here the order exists: every failure below is re-rendered by
+            # ``_order_placed_error`` so it points at Resume instead of a blind
+            # second Generate run.
             try:
-                interaction = await run_interruptible(
-                    wait_for_result(
-                        client,
-                        record.interaction_id,
-                        deadline=deadline,
-                        clock=time.monotonic,
-                        sleep=interruptible_sleep,
+                # Poll until completion or deadline. Neither a deadline nor the
+                # Stop button ever sends op=cancel: the order keeps running and
+                # is only billed when the video exists.
+                deadline = time.monotonic() + wait_budget
+                try:
+                    interaction = await run_interruptible(
+                        wait_for_result(
+                            client,
+                            record.interaction_id,
+                            deadline=deadline,
+                            clock=time.monotonic,
+                            sleep=interruptible_sleep,
+                            on_status=_make_status_callback(
+                                status_node_id,
+                                deadline=deadline,
+                                auto_wait=auto_wait,
+                                interaction_id=record.interaction_id,
+                            ),
+                        )
                     )
-                )
-            except WaitTimeoutError:
-                raise ContractError(f"wait_timeout_{record.interaction_id}") from None
-            except ClientError as e:
-                raise ContractError(f"{e.code}_{record.interaction_id}") from None
+                except WaitTimeoutError:
+                    raise ContractError(
+                        human_message(f"wait_timeout_{record.interaction_id}")
+                    ) from None
+                except ClientError as e:
+                    raise ContractError(f"{e.code}_{record.interaction_id}") from None
+                except BaseException as exc:
+                    if _is_processing_interrupt(exc):
+                        _note_interrupt(status_node_id, record.interaction_id)
+                    raise
 
-            resp_id = interaction.get("id")
-            if resp_id is not None and resp_id != record.interaction_id:
-                raise ContractError(f"interaction_mismatch_{record.interaction_id}")
+                resp_id = interaction.get("id")
+                if resp_id is not None and resp_id != record.interaction_id:
+                    raise ContractError(f"interaction_mismatch_{record.interaction_id}")
 
-            state = interaction.get("state")
-            if state in ("failed", "cancelled"):
-                raise ContractError(f"interaction_{state}_{record.interaction_id}")
+                state = interaction.get("state")
+                if state in ("failed", "cancelled"):
+                    raise ContractError(
+                        _terminal_message(interaction, state, record.interaction_id)
+                    )
 
-            if state != "succeeded":
-                raise ContractError(f"interaction_unknown_{record.interaction_id}")
+                if state != "succeeded":
+                    raise ContractError(f"interaction_unknown_{record.interaction_id}")
 
-            try:
-                spec = read_result(interaction)
-            except ContractError as e:
-                raise ContractError(f"{e}_{record.interaction_id}") from None
+                try:
+                    spec = read_result(interaction)
+                except ContractError as e:
+                    raise ContractError(f"{e}_{record.interaction_id}") from None
 
-            if spec is None:
-                raise ContractError(f"delivery_unavailable_{record.interaction_id}")
+                if spec is None:
+                    raise ContractError(f"delivery_unavailable_{record.interaction_id}")
 
-            try:
-                video = await download_and_wrap_video(spec, settings, record)
-                return video, record.interaction_id, "succeeded"
-            except ContractError as e:
-                err_str = str(e)
-                if record.interaction_id not in err_str:
-                    err_str = f"{err_str}_{record.interaction_id}"
-                raise ContractError(err_str) from None
+                try:
+                    video = await download_and_wrap_video(spec, settings, record)
+                    return video, record.interaction_id, "succeeded"
+                except ContractError as e:
+                    err_str = str(e)
+                    if record.interaction_id not in err_str:
+                        err_str = f"{err_str}_{record.interaction_id}"
+                    raise ContractError(err_str) from None
+            except (ClientError, ContractError) as exc:
+                raise _order_placed_error(exc, record.interaction_id) from None
         finally:
             await client._http.aclose()
 
 
+@_bilingual_errors
 async def execute_resume(
     interaction_id: str = "",
     profile: str = "default",
-    wait_timeout_seconds: int = 600,
+    wait_timeout_seconds: int = 0,
+    node_id: str | None = None,
+    legacy: bool = False,
     **extra: Any,
 ) -> tuple[Any, str, str]:
-    if profile != "default":
+    if not is_valid_profile_name(profile):
         raise ContractError("invalid_profile")
 
-    if (
-        type(wait_timeout_seconds) is not int
-        or isinstance(wait_timeout_seconds, bool)
-        or not (1 <= wait_timeout_seconds <= 3600)
-    ):
+    if legacy and type(wait_timeout_seconds) is int and 1 <= wait_timeout_seconds <= 59:
+        # 0.1.3 and older workflows saved 1-59 s; honour them as a 60 s wait
+        # rather than failing a workflow that used to run.
+        wait_timeout_seconds = WAIT_TIMEOUT_MIN_SECONDS
+
+    if not is_valid_wait_timeout(wait_timeout_seconds):
         raise ContractError("invalid_wait_timeout")
+
+    auto_wait = wait_timeout_seconds == AUTO_WAIT_TIMEOUT
+    wait_budget = resolve_wait_timeout(wait_timeout_seconds)
 
     interaction_id = validate_interaction_id(interaction_id)
 
-    settings = load_settings(os.environ)
+    if node_id is None:
+        ctx = get_executing_context()
+        if ctx is not None and getattr(ctx, "node_id", None):
+            node_id = str(ctx.node_id)
+
+    settings = load_settings(os.environ, profile=profile)
     client = create_client(settings)
     try:
-        deadline = time.monotonic() + wait_timeout_seconds
+        # Resume is entered with an order that already exists, so every failure
+        # here is re-rendered to point back at this node rather than Generate.
         try:
-            interaction = await run_interruptible(
-                wait_for_result(
-                    client,
-                    interaction_id,
-                    deadline=deadline,
-                    clock=time.monotonic,
-                    sleep=interruptible_sleep,
+            deadline = time.monotonic() + wait_budget
+            try:
+                interaction = await run_interruptible(
+                    wait_for_result(
+                        client,
+                        interaction_id,
+                        deadline=deadline,
+                        clock=time.monotonic,
+                        sleep=interruptible_sleep,
+                        on_status=_make_status_callback(
+                            node_id,
+                            deadline=deadline,
+                            auto_wait=auto_wait,
+                            interaction_id=interaction_id,
+                        ),
+                    )
                 )
-            )
-        except WaitTimeoutError:
-            raise ContractError(f"wait_timeout_{interaction_id}") from None
-        except ClientError as e:
-            raise ContractError(f"{e.code}_{interaction_id}") from None
+            except WaitTimeoutError:
+                raise ContractError(
+                    human_message(f"wait_timeout_{interaction_id}")
+                ) from None
+            except ClientError as e:
+                raise ContractError(f"{e.code}_{interaction_id}") from None
+            except BaseException as exc:
+                if _is_processing_interrupt(exc):
+                    _note_interrupt(node_id, interaction_id)
+                raise
 
-        resp_id = interaction.get("id")
-        if resp_id is not None and resp_id != interaction_id:
-            raise ContractError(f"interaction_mismatch_{interaction_id}")
+            resp_id = interaction.get("id")
+            if resp_id is not None and resp_id != interaction_id:
+                raise ContractError(f"interaction_mismatch_{interaction_id}")
 
-        state = interaction.get("state")
-        if state in ("failed", "cancelled"):
-            raise ContractError(f"interaction_{state}_{interaction_id}")
-        if state != "succeeded":
-            raise ContractError(f"interaction_unknown_{interaction_id}")
+            state = interaction.get("state")
+            if state in ("failed", "cancelled"):
+                raise ContractError(
+                    _terminal_message(interaction, state, interaction_id)
+                )
+            if state != "succeeded":
+                raise ContractError(f"interaction_unknown_{interaction_id}")
 
-        try:
-            spec = read_result(interaction)
-        except ContractError as e:
-            raise ContractError(f"{e}_{interaction_id}") from None
+            try:
+                spec = read_result(interaction)
+            except ContractError as e:
+                raise ContractError(f"{e}_{interaction_id}") from None
 
-        if spec is None:
-            raise ContractError(f"delivery_unavailable_{interaction_id}")
+            if spec is None:
+                raise ContractError(f"delivery_unavailable_{interaction_id}")
 
-        try:
-            video = await download_and_wrap_video(spec, settings, None)
-            return video, interaction_id, "succeeded"
-        except ContractError as e:
-            err_str = str(e)
-            if interaction_id not in err_str:
-                err_str = f"{err_str}_{interaction_id}"
-            raise ContractError(err_str) from None
+            try:
+                video = await download_and_wrap_video(spec, settings, None)
+                return video, interaction_id, "succeeded"
+            except ContractError as e:
+                err_str = str(e)
+                if interaction_id not in err_str:
+                    err_str = f"{err_str}_{interaction_id}"
+                raise ContractError(err_str) from None
+        except (ClientError, ContractError) as exc:
+            raise _order_placed_error(exc, interaction_id) from None
     finally:
         await client._http.aclose()
 
 
+@_bilingual_errors
 async def execute_cancel(
     interaction_id: str = "",
     profile: str = "default",
     **extra: Any,
 ) -> tuple[str, str]:
-    if profile != "default":
+    if not is_valid_profile_name(profile):
         raise ContractError("invalid_profile")
 
     interaction_id = validate_interaction_id(interaction_id)
 
-    settings = load_settings(os.environ)
+    settings = load_settings(os.environ, profile=profile)
     client = create_client(settings)
     try:
         resp = await run_interruptible(client.cancel(interaction_id))

@@ -12,13 +12,13 @@
     }
   },
   "3": {
-    "class_type": "InferwayH3Generate",
+    "class_type": "InferwayH3GenerateV2",
     "inputs": {
       "model": "inferway/minimax-h3-768p",
       "prompt": "Smooth cinematic transition from sunrise over calm ocean waves to vibrant starry night sky, 4k",
       "duration_seconds": 5,
       "resolution": "default",
-      "seed": "100",
+      "seed": 100,
       "first_frame": [
         "1",
         0
@@ -28,7 +28,7 @@
         0
       ],
       "profile": "default",
-      "wait_timeout_seconds": 600
+      "wait_timeout_seconds": 0
     }
   },
   "4": {

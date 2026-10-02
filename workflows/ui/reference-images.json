@@ -4,7 +4,7 @@
   "nodes": [
     {
       "id": 1,
-      "type": "InferwayH3Generate",
+      "type": "InferwayH3GenerateV2",
       "pos": [
         100,
         100
@@ -68,9 +68,9 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "InferwayH3Generate",
+        "Node name for S&R": "InferwayH3GenerateV2",
         "cnr_id": "inferway-comfy",
-        "ver": "0.1.2"
+        "ver": "0.1.4"
       },
       "widgets_values": [
         "inferway/minimax-h3-768p",
@@ -80,8 +80,9 @@
         5,
         "default",
         "default",
-        600,
-        "200"
+        0,
+        200,
+        "randomize"
       ]
     },
     {

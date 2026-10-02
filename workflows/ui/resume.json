@@ -42,12 +42,12 @@
       "properties": {
         "Node name for S&R": "InferwayH3Resume",
         "cnr_id": "inferway-comfy",
-        "ver": "0.1.2"
+        "ver": "0.1.4"
       },
       "widgets_values": [
         "YOUR_INTERACTION_ID",
         "default",
-        600
+        0
       ]
     },
     {

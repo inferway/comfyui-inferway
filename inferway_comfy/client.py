@@ -128,6 +128,9 @@ class InferwayClient:
         self._http = http
         self._settings = settings
         self._base_origin = base_origin
+        # Set by chat_completion so a caller can notice a truncated answer
+        # while the method keeps returning the plain completion text.
+        self.last_chat_finish_reason: str | None = None
 
         if base_origin is not None:
             # base_origin string must not authorize external arbitrary origin
@@ -266,6 +269,10 @@ class InferwayClient:
         if code is None:
             if resp.status_code == 401:
                 code = "unauthorized"
+            elif resp.status_code == 402:
+                # Wallet is empty or on hold. Named explicitly so the node can
+                # send the customer to the console instead of "request failed".
+                code = "payment_required"
             elif resp.status_code == 403:
                 code = "forbidden"
             elif resp.status_code == 404:
@@ -552,6 +559,64 @@ class InferwayClient:
             raise ClientError("invalid_cancel_charged")
 
         return payload
+
+    async def chat_completion(
+        self,
+        *,
+        model: str,
+        messages: list[dict],
+        max_tokens: int,
+        temperature: float,
+    ) -> str:
+        """POST /v1/chat/completions, non-streaming, returning the reply text.
+
+        Shares the interactions transport: same origin verification, same
+        timeout, same closed error mapping, and the same no-retry behaviour of
+        op=list/op=get (a retried completion would be billed twice). The body
+        carries exactly model, messages, max_tokens and temperature -- never a
+        ``reasoning*`` or ``enable_thinking`` field, because thinking is off by
+        default on the platform. ``finish_reason == "length"`` still returns
+        the text and is recorded in :attr:`last_chat_finish_reason`.
+        """
+        self.last_chat_finish_reason = None
+
+        body = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        content = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode(
+            "utf-8"
+        )
+        headers = {"Content-Type": "application/json"}
+        resp = await self._send_request(
+            "POST",
+            "/v1/chat/completions",
+            content=content,
+            headers=headers,
+        )
+        payload = self._handle_response(resp)
+
+        choices = payload.get("choices")
+        if not isinstance(choices, (list, tuple)) or not choices:
+            raise ClientError("empty_completion")
+        first = choices[0]
+        if not isinstance(first, dict):
+            raise ClientError("empty_completion")
+        finish_reason = first.get("finish_reason")
+        if isinstance(finish_reason, str):
+            self.last_chat_finish_reason = finish_reason
+        message = first.get("message")
+        if not isinstance(message, dict):
+            raise ClientError("empty_completion")
+        text = message.get("content")
+        if not isinstance(text, str):
+            raise ClientError("empty_completion")
+        text = text.strip()
+        if not text:
+            raise ClientError("empty_completion")
+        return text
 
 
 def create_client(settings: ClientSettings) -> InferwayClient:

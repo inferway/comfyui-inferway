@@ -6,7 +6,28 @@ import logging
 import os
 from typing import Any
 
+# Served at /extensions/<module-name>/ so the browser can import ./web/inferway.js.
+WEB_DIRECTORY = "./web"
+
 _logger = logging.getLogger(__name__)
+
+
+def _static_model_options() -> list[str]:
+    """Static ``model`` options of the generate node, used when discovery fails."""
+    try:
+        from .inferway_comfy.nodes import InferwayH3Generate
+
+        schema = InferwayH3Generate.GET_SCHEMA()
+        for item in getattr(schema, "inputs", []):
+            if getattr(item, "id", None) == "model":
+                options = getattr(item, "options", None)
+                if isinstance(options, list) and options:
+                    return [str(option) for option in options]
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning(
+            "Inferway static model options unavailable: %s", type(exc).__name__
+        )
+    return []
 
 
 async def comfy_entrypoint() -> Any:
@@ -21,8 +42,10 @@ async def comfy_entrypoint() -> Any:
     from .inferway_comfy.nodes import (
         InferwayH3Cancel,
         InferwayH3Generate,
+        InferwayH3GenerateV2,
         InferwayH3Resume,
     )
+    from .inferway_comfy.nodes_extra import InferwayH3History, InferwayPromptExpand
     from .inferway_comfy.runtime import clear_prompt_fingerprints, get_registry
 
     class InferwayCacheProvider(CacheProvider):
@@ -86,12 +109,15 @@ async def comfy_entrypoint() -> Any:
         from .inferway_comfy.contracts import read_models
         from .inferway_comfy.credentials import ClientError, load_settings
 
+        # A missing or broken key must not leave the model dropdown empty.
+        static_models = _static_model_options()
+
         @routes.get(route_path)
         async def handle_get_models(request: web.Request) -> web.Response:
             try:
                 settings = load_settings(os.environ)
             except (ClientError, Exception):  # noqa: BLE001
-                return web.json_response([])
+                return web.json_response(static_models)
 
             client = create_client(settings)
             try:
@@ -100,7 +126,7 @@ async def comfy_entrypoint() -> Any:
                 model_ids = [c.model for c in caps]
                 return web.json_response(model_ids)
             except (ClientError, Exception):  # noqa: BLE001
-                return web.json_response([])
+                return web.json_response(static_models)
             finally:
                 await client._http.aclose()
 
@@ -115,11 +141,19 @@ async def comfy_entrypoint() -> Any:
             # Register local authenticated route for remote model discovery
             register_model_discovery_route()
 
+            # Register the local-only API key profile routes
+            from .inferway_comfy.local_routes import register_local_credential_routes
+
+            register_local_credential_routes()
+
         async def get_node_list(self) -> list[type[io.ComfyNode]]:
             return [
+                InferwayH3GenerateV2,
                 InferwayH3Generate,
                 InferwayH3Resume,
                 InferwayH3Cancel,
+                InferwayH3History,
+                InferwayPromptExpand,
             ]
 
     return InferwayExtension()

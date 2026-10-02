@@ -1,0 +1,32 @@
+{
+  "1": {
+    "class_type": "InferwayH3History",
+    "inputs": {
+      "profile": "default",
+      "limit": 10,
+      "state": "all"
+    }
+  },
+  "2": {
+    "class_type": "InferwayH3Resume",
+    "inputs": {
+      "interaction_id": [
+        "1",
+        1
+      ],
+      "profile": "default",
+      "wait_timeout_seconds": 0
+    }
+  },
+  "3": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "2",
+        0
+      ],
+      "filename_prefix": "video/history",
+      "format": "mp4"
+    }
+  }
+}

@@ -18,13 +18,13 @@
     }
   },
   "4": {
-    "class_type": "InferwayH3Generate",
+    "class_type": "InferwayH3GenerateV2",
     "inputs": {
       "model": "inferway/minimax-h3-768p",
       "prompt": "Cinematic character sequence maintaining visual consistency with reference images, high fidelity, 4k",
       "duration_seconds": 5,
       "resolution": "default",
-      "seed": "200",
+      "seed": 200,
       "ref_image_1": [
         "1",
         0
@@ -38,7 +38,7 @@
         0
       ],
       "profile": "default",
-      "wait_timeout_seconds": 600
+      "wait_timeout_seconds": 0
     }
   },
   "5": {

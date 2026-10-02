@@ -5,7 +5,7 @@ Native ComfyUI custom node extension for [Inferway](https://inferway.ai) H3 vide
 > [!NOTE]
 > **Package**: Published to the ComfyUI Registry as package ID `inferway-comfy` (PublisherId `inferway`, DisplayName `Inferway H3`). Source repository: https://github.com/inferway/comfyui-inferway
 >
-> **Production Acceptance & Verification Boundaries**: Authorized real production acceptance was completed on 2026-09-21 for `inferway/minimax-h3-768p` on Linux (Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6). Windows and macOS environments have not yet been independently verified. Real production validation demonstrated exactly one paid create across Generate, Resume, and Cancel workflows. See [Section 7](#7-production-acceptance-evidence--verification-boundaries) for complete verified evidence and boundaries.
+> **Production Acceptance & Verification Boundaries**: Authorized real production acceptance was completed on 2026-09-21 for `inferway/minimax-h3-768p` on Linux (Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6). macOS has not yet been independently verified. On Windows, 0.1.2 and earlier could not download a finished video (see Section 7.2); 0.1.3 fixes this, and its client package suites run on Windows in CI. Real production validation demonstrated exactly one paid create across Generate, Resume, and Cancel workflows. See [Section 7](#7-production-acceptance-evidence--verification-boundaries) for complete verified evidence and boundaries.
 
 ---
 
@@ -58,16 +58,39 @@ Inferway nodes use a strict server-side credentials boundary to protect API keys
    export INFERWAY_API_KEY="your_inferway_api_key_here"
    ```
 2. **Restart ComfyUI**: Restart your ComfyUI server so the process picks up the environment variable.
-3. **No UI or Workflow Leaks**: ComfyUI frontend nodes **never** expose API key inputs, tokens, custom backend URLs, or secret paths. Saved workflow JSON files will not contain credentials, preventing accidental leaks when sharing workflows.
+3. **No UI or Workflow Leaks**: ComfyUI frontend nodes **never** expose API key inputs, tokens, custom backend URLs, or secret paths — only a `profile` **name** dropdown whose options are read server-side from the local store. Saved workflow JSON files will not contain credentials, preventing accidental leaks when sharing workflows.
 4. **No Cloud Credentials Required**: No AWS credentials, SQS endpoints, or third-party storage secrets are required for clients.
+5. **Machine-Local Profile Store (Security Note)**: a key saved from the in-app dialog (**Inferway → Manage Inferway API key**) is written to `user/__inferway/credentials.json` inside ComfyUI's system-user directory, which no HTTP route serves. The file is created owner-only (`0600`/`0700` on POSIX; `icacls`-restricted to the current user on Windows), never stored in `comfy.settings.json`, workflow files or PNG metadata, and never logged. Profile edits are refused for any non-loopback client unless `INFERWAY_ALLOW_REMOTE_KEY_EDIT=1` is set deliberately.
+
+   > **Caveat**: the key store belongs to the whole ComfyUI installation, not to a ComfyUI login. Under ComfyUI's `--multi-user` mode the profiles are **not** isolated between users — everyone who can use that ComfyUI instance can select (and, on that machine, read) the same stored keys. Do not share a `--multi-user` instance between mutually untrusting parties.
 
 ---
 
 ## 3. Node Specifications
 
-The extension registers three nodes under the **`Inferway`** category:
+The extension registers six nodes under the **`Inferway`** category:
 
-### 3.1 `InferwayH3Generate` (Video Generation)
+### 3.1 `InferwayH3GenerateV2` / `InferwayH3Generate` (Video Generation)
+
+`InferwayH3GenerateV2` (shown as **Inferway H3 Generate**) is the current node. It is
+exactly the legacy node in behaviour, with one change: `seed` is now a normal ComfyUI
+integer widget with the usual *control after generate* selector, defaulted to
+`randomize`.
+
+| | `InferwayH3GenerateV2` | `InferwayH3Generate` (legacy) |
+|---|---|---|
+| `seed` widget | integer, `0` to `18446744073709551615`, with *control after generate* | text field, decimal digits or blank |
+| Blank `seed` | not possible — a value is always sent | blank means "no seed pinned" |
+| Default control mode | `randomize`: every run is a new paid order, so each one gets a different video | n/a |
+| Node search | listed normally | marked deprecated, shown as **Inferway H3 Generate (legacy)** |
+
+**Every run is a new order.** Each time you press Run, the Generate node places a
+new order and that order is billed when its video finishes. The seed does not
+change this: a `fixed` seed does not reuse an earlier order, it only asks for a
+similar video again. After a wait timeout, do not run Generate again; put the
+task id into an `InferwayH3Resume` node instead. Every other input, output,
+socket position and saved workflow from the legacy node keeps working
+unchanged; new examples ship with V2.
 
 Submits an asynchronous video generation task and polls locally for delivery.
 
@@ -76,12 +99,16 @@ Submits an asynchronous video generation task and polls locally for delivery.
   - `prompt`: Text prompt for video generation.
   - `duration_seconds`: Video duration in integer seconds (5 to 10, default 5).
   - `resolution`: Resolution preset (`"default"`, `"1344x768"`, `"768x1344"`).
-  - `seed`: Optional uint64 string seed (`0` to `18446744073709551615`). Leave blank for random.
+  - `seed`: V2 takes an integer from `0` to `18446744073709551615` (default `0`,
+    control after generate `randomize`). The legacy node takes an optional decimal
+    uint64 string; leaving it blank means no seed is pinned.
   - `first_frame` (optional): Initial frame image from a `LoadImage` node.
   - `last_frame` (optional): Final frame image from a `LoadImage` node.
   - `ref_image_1`, `ref_image_2`, `ref_image_3` (optional): Up to 3 reference images.
   - `profile`: Profile name, default `"default"`.
-  - `wait_timeout_seconds`: Polling wait timeout in seconds (1 to 3600, default 600).
+  - `wait_timeout_seconds`: How long this node keeps waiting locally. `0` (the
+    default) waits on the queue automatically, capped at 7200 seconds; `60` to
+    `7200` sets an explicit cap. Reaching the cap never cancels the task.
 - **Outputs**:
   - `video`: Native ComfyUI `VIDEO` object, directly connectable to `SaveVideo`.
   - `interaction_id`: Unique task identifier (`int_<32 hex chars>`).
@@ -98,7 +125,9 @@ Resumes polling and downloading for an already existing task after network inter
 - **Inputs**:
   - `interaction_id`: Target task ID (`int_<32 hex chars>`).
   - `profile`: Default `"default"`.
-  - `wait_timeout_seconds`: Polling timeout in seconds (default 600).
+  - `wait_timeout_seconds`: How long to keep waiting locally: `0` (default) waits
+    automatically up to 7200 seconds, `60` to `7200` sets an explicit cap. The
+    task itself is never cancelled when the cap is reached.
 - **Outputs**:
   - `video`: Native `VIDEO` object.
   - `interaction_id`: Verified task ID.
@@ -119,21 +148,77 @@ Explicitly requests remote cancellation of a queued or processing generation tas
   - Possible `outcome` values: `pending`, `cancelled`, `delivering`, `delivered`, `refused`.
   - The status includes the server's boolean `charged` field (e.g. `delivering` with `charged=False`, `delivered` with `charged=True`). Do not assume HTTP 200 indicates free cancellation.
 
+### 3.4 `InferwayH3History` (Recent Interaction History)
+
+Lists this account's most recent video tasks inside ComfyUI, so a workflow that hit its local timeout (or a ComfyUI restart) never forces a trip to the console to copy an interaction ID.
+
+- **Inputs**:
+  - `profile`: Profile name, default `"default"`.
+  - `limit`: How many recent interactions to list (1 to 50, default 10).
+  - `state`: Filter (`all`, `succeeded`, `failed`, `queued`, `running`, `cancelled`), default `all`. `all` sends no state filter.
+- **Outputs**:
+  - `history`: One line per interaction — `created_at` (UTC, truncated to the minute), `state`, `request.mode`, `request.duration_seconds`, `billing.charged_amount` plus `currency`, availability (`downloadable` or `expired`), `id`, and `request.prompt_excerpt`. With no records the single line reads `No interactions found.`
+  - `latest_succeeded_id`: The newest `succeeded` interaction whose result is still downloadable, empty when there is none. It is a `STRING` compatible with the Resume `interaction_id` input, so the two nodes can be wired directly. In the shipped `history.json`, Resume fails the queue with `invalid_interaction_id` when no downloadable success is listed, and otherwise downloads that newest video again on every queue (no charge, only transfer time); unwire Resume when you only want the list.
+- **Contract**: **read-only**. The node sends `POST /v1/interactions` with `op=list` only — never `get`, `create` or `cancel` — and `op=list` never issues a signed download link. It refetches on every queue, because history is live data.
+
+### 3.5 `InferwayPromptExpand` (MiMo Prompt Expansion)
+
+Expands a short idea into a complete video prompt with Inferway's own `inferway/mimo-v2.6-flash` chat model (`POST /v1/chat/completions`, non-streaming), ready to feed into the Generate `prompt` input.
+
+- **Inputs**:
+  - `profile`: Profile name, default `"default"`. **This profile's balance pays for the MiMo tokens.**
+  - `idea`: The short idea to expand (multi-line, required). A blank idea fails locally before any request is sent.
+  - `language`: Prompt language — `auto`, `zh` or `en`, default `auto` (`auto` answers in the language of the idea).
+- **Outputs**:
+  - `prompt`: One paragraph of prompt text without preamble, explanation or Markdown.
+- **Billing**: the expansion call is **billed per token** on `inferway/mimo-v2.6-flash`, separately from any video generation charge.
+  - Re-queuing with identical inputs usually reuses ComfyUI's cached text, so the same expansion is not paid for twice. This is best effort: a ComfyUI restart, `--cache-none`, or the cache being evicted under memory pressure runs the expansion again and bills it again (and, at temperature 0.7, may return different text).
+  - A failed expansion is not cached. In particular, a 30-second timeout can arrive after the service has already finished and billed the tokens, so re-queuing after a timeout may bill a second expansion.
+  - If the reply hits the token limit, the node keeps the text but shows `提示词被截断…` / `Prompt truncated…` on the node. Read the prompt before it reaches a paid Generate node, or shorten the idea and expand again.
+
 ---
 
 ## 4. Background Jobs, Interruption & Cancellation
 
-1. **Closing Browser Windows**:
+1. **Progress While You Wait**:
+   Generate and Resume report every status poll back to ComfyUI. While an order is
+   queued the node shows `排队中：前面还有 N 单，预计 M 分钟后开始` / `Queued: N ahead,
+   starts in about M min`; while it renders it shows `生成中：已 X 秒（通常 Y 秒）` /
+   `Generating: Xs (usually Ys)` together with a progress bar scaled to the
+   service's typical duration for that tier. Nothing is drawn while queued, so the
+   bar never pretends to know a percentage the service does not publish.
+2. **Automatic Waiting**:
+   `wait_timeout_seconds = 0` (the default) means "wait on the queue": the node
+   keeps polling for as long as the order is `queued` or `running`, up to 7200
+   seconds. A value saved by an older workflow (600 and friends) is still honoured
+   as an explicit cap. If the queue estimate will outlast the cap, the node says so
+   in its progress text.
+3. **Neither The Cap Nor Stop Cancels Anything**:
+   Hitting the local wait cap, or pressing **Stop** in ComfyUI, only ends the local
+   wait. The remote order keeps running and is billed only when the video exists —
+   so a red "timed out" message does **not** mean the money is gone. Do not re-submit:
+   put the task id from the message into an `InferwayH3Resume` node and collect the
+   clip. The message says exactly this, in Chinese and English.
+4. **Closing Browser Windows**:
    Closing browser tabs only disconnects the frontend WebSocket client. It **does not stop** execution on the ComfyUI server. The server background coroutine continues waiting, polling, and downloading generation results.
 2. **Local Stop vs. Explicit Remote Cancellation**:
    - Clicking **Stop** in the ComfyUI interface or encountering a local `wait_timeout_seconds` timeout only interrupts the local client polling coroutine. It **does not send a cancel request** to the remote Inferway service. Remote generation continues and may incur charges if completed.
    - To stop a remote task, execute `InferwayH3Cancel` with the target `interaction_id` (issuing `POST /v1/interactions` with an `op=cancel` body) and inspect the returned `outcome` and `charged` status.
+3. **Error Messages Are Bilingual**:
+   Every customer-facing failure is rendered as a Chinese sentence, an English
+   sentence, and the raw code in parentheses — for example
+   `余额不足，请充值后重试：https://inferway.ai/console/billing` / `Insufficient
+   balance, top up and try again: ...` `(code: payment_required)`. A missing or
+   rejected key points at ComfyUI's **Settings → Inferway** row and
+   https://inferway.ai/console/keys; a failed order that the service reports as
+   uncharged says so. The trailing code is what support needs, the sentences are
+   what you need, and neither ever contains an API key.
 
 ---
 
 ### Finding an Interaction ID After a Lost Response
 
-Use the Inferway console task history, or run the history CLI with the same server-side key and ComfyUI Python environment:
+Use the Inferway console task history, the `InferwayH3History` node (it prints the same IDs on the canvas and can feed Resume directly), or run the history CLI with the same server-side key and ComfyUI Python environment:
 
 ```bash
 cd /path/to/ComfyUI/custom_nodes/inferway-comfy
@@ -150,6 +235,7 @@ The CLI lists IDs, model, status, creation time and source key name. It does not
 - **Audio Verification & Fixture Scope**: The observed AAC result in production acceptance and test fixtures proves the tested audio handling and preservation in the client and `SaveVideo` pipeline, not that every future response is guaranteed to contain AAC audio.
 - **Secure Download & Integrity**: Result downloads verify byte count and SHA-256 against the result metadata returned by the authenticated API before caching.
 - **Private Cache Leases**: Media cache files are stored in private temporary directories and held by `VIDEO` object references. Prompt cleanup clears execution registry records without prematurely removing video cache files referenced by downstream nodes.
+- **Windows**: Windows has no POSIX owner or permission bits, so the owner-only checks apply on Linux and macOS; on Windows the cache directory inherits the ACL of ComfyUI's temp directory. Downloads are written in binary mode. A cache file that a preview or save node still holds open is deleted later, at the latest when ComfyUI empties its temp directory on the next start.
 
 ---
 
@@ -164,6 +250,8 @@ Use **Ctrl+O** in ComfyUI to import one of the [canvas workflows](workflows/ui/R
 - [Reference images](workflows/ui/reference-images.json): Load up to three reference images to keep the generated shot visually consistent with them. Available only while the live model catalog advertises the mode.
 - [Resume](workflows/ui/resume.json): Enter an existing interaction ID to retrieve its video without creating another task.
 - [Cancel](workflows/ui/cancel.json): Enter the target interaction ID and inspect the visible outcome and `charged` value.
+- [History](workflows/ui/history.json): List recent tasks on the canvas and hand the newest resumable interaction ID straight to Resume.
+- [Prompt expand](workflows/ui/prompt-expand-t2v.json): Expand a short idea with MiMo and feed the result into Generate.
 
 Generate/Resume/Cancel node paths were exercised against production, while the importable canvas JSON files were separately validated in native ComfyUI (0.37.0, frontend 1.53.6) against the loopback API.
 
@@ -171,11 +259,13 @@ Generate/Resume/Cancel node paths were exercised against production, while the i
 
 Sample API-format workflow definitions are included in the [`workflows/`](workflows/) directory:
 
-1. [`workflows/t2v.json`](workflows/t2v.json): Text-to-video workflow (`InferwayH3Generate` -> `SaveVideo`).
+1. [`workflows/t2v.json`](workflows/t2v.json): Text-to-video workflow (`InferwayH3GenerateV2` -> `SaveVideo`).
 2. [`workflows/first-last-frame.json`](workflows/first-last-frame.json): First and last frame video workflow.
 3. [`workflows/reference-images.json`](workflows/reference-images.json): Multi-image reference video workflow.
 4. [`workflows/resume.json`](workflows/resume.json): Resumption workflow (`InferwayH3Resume` -> `SaveVideo`).
 5. [`workflows/cancel.json`](workflows/cancel.json): Explicit remote cancellation workflow (`InferwayH3Cancel`).
+6. [`workflows/history.json`](workflows/history.json): Recent-history workflow (`InferwayH3History` -> `InferwayH3Resume` -> `SaveVideo`).
+7. [`workflows/prompt-expand-t2v.json`](workflows/prompt-expand-t2v.json): Prompt expansion workflow (`InferwayPromptExpand` -> `InferwayH3GenerateV2` -> `SaveVideo`).
 
 ### Submitting API Format Workflows
 
@@ -209,9 +299,9 @@ Authorized real production acceptance was completed on **2026-09-21** for the H3
 - **Verified Platform**: The verified host platform for the final continuation was Linux, Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6.
 
 ### 7.2 Verification Boundaries & Policies
-- **Capability Boundary**: Production capability was observed as text-to-video only (`t2v-only`). Image sockets exist on the node, but image modes are allowed only when the live model catalog advertises them.
+- **Capability Boundary**: At the 2026-09-21 acceptance, production offered text-to-video only. Since then the live model catalog advertises `t2v`, `fl2va` and `ref2va`; on 2026-10-01 one first/last-frame and one reference-image order each ran end to end against production through the HTTP API (not through ComfyUI). Image modes are allowed only when the live model catalog advertises them.
 - **Audio Scope**: The observed AAC result proves the tested path and media pipeline preservation, not that every future response from the service is guaranteed to contain AAC audio.
-- **Platform Scope**: Linux is verified; Windows and macOS environments have not been independently verified.
+- **Platform Scope**: Linux is verified end to end. Up to 0.1.2, every Windows download failed after the order had been charged: the media cache called `os.getuid()`, which Windows does not have, and opened the file without `O_BINARY`, which corrupts the video. 0.1.3 fixes both, and CI now runs the client package suites, media download included, on `windows-2025`. A full ComfyUI session on Windows and anything on macOS have not been independently verified.
 - **Publication Status**: Published to the ComfyUI Registry as `inferway-comfy` and to the public repository https://github.com/inferway/comfyui-inferway; the node is searchable and installable from ComfyUI-Manager.
 - **Confidentiality**: In accordance with security policy, no API keys, secret paths, full interaction IDs, prompt text, internal host paths, prompt IDs, or signed download URLs are published.
 
