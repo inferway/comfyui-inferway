@@ -7,6 +7,10 @@ Native ComfyUI custom node extension for [Inferway](https://inferway.ai) H3 vide
 >
 > **Production Acceptance & Verification Boundaries**: Authorized real production acceptance was completed on 2026-09-21 for `inferway/minimax-h3-768p` on Linux (Python 3.12.13, ComfyUI 0.37.0, frontend 1.53.6). macOS has not yet been independently verified. On Windows, 0.1.2 and earlier could not download a finished video (see Section 7.2); 0.1.3 fixes this, and its client package suites run on Windows in CI. 0.1.4 ran end to end on a real Windows 11 host (ComfyUI 0.37.0): a key saved from the in-app dialog, Prompt Expand into Generate, then History into Resume. Real production validation demonstrated exactly one paid create across Generate, Resume, and Cancel workflows. See [Section 7](#7-production-acceptance-evidence--verification-boundaries) for complete verified evidence and boundaries.
 
+Documentation: [ComfyUI installation and setup](https://inferway.ai/docs/comfyui) · [H3 model, capabilities and pricing](https://inferway.ai/model/minimax-h3-768p) · [Video API guide](https://inferway.ai/docs/video).
+
+中文文档：[ComfyUI 安装与接入](https://inferway.ai/zh/docs/comfyui) · [H3 模型、能力与价格](https://inferway.ai/zh/model/minimax-h3-768p) · [视频 API 指南](https://inferway.ai/zh/docs/video)。
+
 ---
 
 ## 1. Installation
